@@ -91,6 +91,22 @@ test('freelance_classify_document never auto-files without an OpenRouter key con
   assert.equal(r.auto_filed, false);
 });
 
+test('concurrent freelance_new_project calls never lose an _index.json entry', async () => {
+  const registry = freshEnv();
+  // Two children of the same profile can run under the managed adapter — the
+  // shared read-modify-write index must serialize (epic #1271 §18).
+  const [a, b] = await Promise.all([
+    registry.callTool('freelance_new_project', { name: 'Project Alpha', description: 'x' }),
+    registry.callTool('freelance_new_project', { name: 'Project Beta', description: 'y' }),
+  ]);
+  assert.notEqual(a.project_id, b.project_id);
+  const list = await registry.callTool('freelance_list');
+  const names = list.projects.map(p => p.name);
+  assert.ok(names.includes('Project Alpha'));
+  assert.ok(names.includes('Project Beta'));
+  assert.equal(list.projects.length, 2, 'both concurrent creations must survive in _index.json');
+});
+
 test('a broken/truncated LLM response never gets silently treated as "definitely new" — regression for the duplicate-lead bug found in real testing', async () => {
   const registry = freshEnv();
   process.env.OPENROUTER_API_KEY = 'fake-key-for-this-test';

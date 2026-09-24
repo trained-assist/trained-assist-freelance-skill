@@ -23,6 +23,15 @@ const { freelanceRoot, indexPath, projectDir, projectFile, ensureDir } = require
 const { slugify } = require('../lib/slug');
 const riskEngine = require('../lib/risk-engine');
 const sheets = require('../lib/sheets');
+const { withLock } = require('../lib/with-lock');
+
+// Cross-process serialization for the shared profile-wide _index.json. Multiple
+// provider children of the same profile can run concurrently under the managed
+// Control Plane adapter (#1271 §18) — a plain read-modify-write loses updates.
+// The lock lives next to the index file so it is per-profile, not per-process.
+function indexLock() {
+  return path.join(freelanceRoot(USER_ID), '._index.lock');
+}
 
 // ── Index (profile-wide project registry) ──────────────────────────────────
 
@@ -35,15 +44,20 @@ function readIndex() {
 function writeIndex(list) {
   const f = indexPath(USER_ID);
   ensureDir(path.dirname(f));
-  fs.writeFileSync(f, JSON.stringify(list, null, 2));
+  // Atomic-ish: write temp then rename so a concurrent reader never sees a torn file.
+  const tmp = `${f}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(list, null, 2));
+  fs.renameSync(tmp, f);
 }
 
 function upsertIndexEntry(entry) {
-  const list = readIndex();
-  const i = list.findIndex(p => p.id === entry.id);
-  if (i >= 0) list[i] = { ...list[i], ...entry };
-  else list.push(entry);
-  writeIndex(list);
+  return withLock(indexLock(), () => {
+    const list = readIndex();
+    const i = list.findIndex(p => p.id === entry.id);
+    if (i >= 0) list[i] = { ...list[i], ...entry };
+    else list.push(entry);
+    writeIndex(list);
+  });
 }
 
 // ── Project record ──────────────────────────────────────────────────────────
@@ -203,48 +217,50 @@ module.exports = {
         },
       },
       handler: async ({ name, description, type = 'default', source = 'chat', reliability = 'medium', force_new = false }) => {
-        if (!force_new) {
-          const nameKey = String(name).trim().toLowerCase();
-          const dupe = readIndex().find(p => String(p.name || '').trim().toLowerCase() === nameKey);
-          if (dupe) {
-            return {
-              duplicate: true, project_id: dupe.slug, name: dupe.name,
-              message: `⚠️ Проект «${dupe.name}» уже существует (${dupe.slug}) — новый не создан. ` +
-                `Используй freelance_add_info(project=${dupe.slug}, ...) чтобы дополнить, либо force_new:true если это осознанно другой проект.`,
-            };
+        return withLock(indexLock(), async () => {
+          if (!force_new) {
+            const nameKey = String(name).trim().toLowerCase();
+            const dupe = readIndex().find(p => String(p.name || '').trim().toLowerCase() === nameKey);
+            if (dupe) {
+              return {
+                duplicate: true, project_id: dupe.slug, name: dupe.name,
+                message: `⚠️ Проект «${dupe.name}» уже существует (${dupe.slug}) — новый не создан. ` +
+                  `Используй freelance_add_info(project=${dupe.slug}, ...) чтобы дополнить, либо force_new:true если это осознанно другой проект.`,
+              };
+            }
           }
-        }
 
-        const slug = uniqueSlug(slugify(name));
-        scaffoldProject(slug, name, type);
+          const slug = uniqueSlug(slugify(name));
+          scaffoldProject(slug, name, type);
 
-        const proj = {
-          slug, name, type, status: 'active',
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-          signals: riskEngine.defaultSignals(type),
-          projectInfo: { integrationCount: null, hasMVP: null },
-          spreadsheetId: null, spreadsheetUrl: null,
-          lastAssessment: null,
-        };
-        saveProject(proj);
+          const proj = {
+            slug, name, type, status: 'active',
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            signals: riskEngine.defaultSignals(type),
+            projectInfo: { integrationCount: null, hasMVP: null },
+            spreadsheetId: null, spreadsheetUrl: null,
+            lastAssessment: null,
+          };
+          saveProject(proj);
 
-        const prov = appendProvenance(slug, { source, raw_excerpt: description.slice(0, 2000), reliability, note: 'initial intake' });
-        appendStageContent(slug, 'fact', description, prov.id);
+          const prov = appendProvenance(slug, { source, raw_excerpt: description.slice(0, 2000), reliability, note: 'initial intake' });
+          appendStageContent(slug, 'fact', description, prov.id);
 
-        const assessment = type === 'academic' ? null : await runAndSaveAssessment(proj);
+          const assessment = type === 'academic' ? null : await runAndSaveAssessment(proj);
 
-        return {
-          project_id: slug,
-          name,
-          type,
-          path: `Фриланс проекты/${slug}/`,
-          verdict: assessment?.verdict || 'Тип academic — риск-модель клиентских отношений не применяется, см. requirements.md/solution.md напрямую.',
-          risk_level: assessment?.level || null,
-          risk_score: assessment?.score ?? null,
-          open_questions: assessment?.openQuestions?.slice(0, 5).map((q, i) => `${i + 1}. ${q.question}`) || [],
-          message: `✅ Проект создан: ${slug}. Скелет pipeline создан в "Фриланс проекты/${slug}/". ` +
-            (assessment ? `Вердикт: ${assessment.verdict}` : 'Тип academic — заполняй requirements.md/solution.md напрямую.'),
-        };
+          return {
+            project_id: slug,
+            name,
+            type,
+            path: `Фриланс проекты/${slug}/`,
+            verdict: assessment?.verdict || 'Тип academic — риск-модель клиентских отношений не применяется, см. requirements.md/solution.md напрямую.',
+            risk_level: assessment?.level || null,
+            risk_score: assessment?.score ?? null,
+            open_questions: assessment?.openQuestions?.slice(0, 5).map((q, i) => `${i + 1}. ${q.question}`) || [],
+            message: `✅ Проект создан: ${slug}. Скелет pipeline создан в "Фриланс проекты/${slug}/". ` +
+              (assessment ? `Вердикт: ${assessment.verdict}` : 'Тип academic — заполняй requirements.md/solution.md напрямую.'),
+          };
+        });
       },
     },
 
