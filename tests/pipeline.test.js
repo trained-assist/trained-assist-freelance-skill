@@ -214,6 +214,19 @@ test('spec-generation info tools describe current settings, notes and the repo l
   assert.match(e.text, /github\.com\/trained-assist\/trained-assist-freelance-skill/);
 });
 
+test('commands.json is the domain-owned command surface and maps only to existing tools', async () => {
+  const registry = freshEnv();
+  const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'commands.json'), 'utf8'));
+  const tools = new Set(registry.listTools().map(t => t.name));
+  const mapped = spec.commands.filter(c => c.handler === 'tool');
+  assert.ok(mapped.length >= 9, 'the domain should expose the project + spec-generation commands');
+  for (const c of mapped) assert.ok(tools.has(c.tool), `${c.command} -> ${c.tool} must exist`);
+  assert.deepEqual(
+    spec.commands.filter(c => c.command.startsWith('spec_generation')).map(c => c.command),
+    ['spec_generation_defaults', 'spec_generation_explained'],
+  );
+});
+
 test('a broken/truncated LLM response never gets silently treated as "definitely new" — regression for the duplicate-lead bug found in real testing', async () => {
   const registry = freshEnv();
   process.env.OPENROUTER_API_KEY = 'fake-key-for-this-test';
