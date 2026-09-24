@@ -84,9 +84,32 @@ $USERS_DIR/<profile>/Фриланс проекты/
   document to an existing project or "new project". Content dominates over
   filename; recency is a prior, never sufficient on its own to auto-file.
 
+## Provider manifest (`provider-manifest.json`)
+
+Manifest v2 for onboarding into the Agent Control Plane's approved MCP source
+registry (trained-assist-agent#1271): all 9 actions with `inputSchema` /
+`effect` / `requiresApproval` / `retrySafety`, plus `contextFields` and
+`connections` (gdrive, openrouter). The manifest is metadata for the managed
+MCP adapter; it does not change how the skill stores data (see §15/§16 of the
+epic — the legacy profile-root filesystem store remains the source of truth).
+
+## Migrating legacy projects (`scripts/migrate-outsource.js`)
+
+One-shot conversion of `outsource-projects/<id>.json` (the old per-topic format
+from trained-assist-agent's `94-outsource-project.js`) into the profile-root
+multi-project store:
+
+```bash
+USERS_DIR=/home/vova/users node scripts/migrate-outsource.js --profile <username> [--dry-run]
+```
+
+Carries signals/projectInfo, maps `infoChunks`/`qaLog` to pipeline stages,
+preserves originals in `provenance/raw/`, and reassesses risk with the current
+deterministic engine. Idempotent by project name.
+
 ## Standalone bot (`bin/`)
 
-A minimal, self-contained Telegram long-poll bot + Claude Code runner —
+A minimal, self-contained Telegram long-poll bot + opencode runner —
 deliberately decoupled from `trained-assist-agent`'s server/runner/session code.
 Runs on the same shared VM infra under the same `vova` user (no separate Linux
 user), in its own directory. See `bin/README.md` for the deploy/run details.
