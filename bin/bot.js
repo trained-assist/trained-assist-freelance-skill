@@ -23,6 +23,14 @@ const USERS_DIR = path.join(DATA_DIR, 'users');
 const STATE_FILE = path.join(DATA_DIR, 'bot-state.json');
 const TOKEN_FILE = process.env.FREELANCE_BOT_TOKEN_FILE || path.join(DATA_DIR, 'bot-token');
 
+// opencode + DeepSeek instead of Claude Code — much cheaper for this bot's volume.
+// "opencode-go/deepseek-v4.1-flash" is the VM's existing `deepseek-go` opencode
+// profile's model (~/*/​.opencode/profiles/deepseek-go.json), already authenticated
+// via ~/.local/share/opencode/auth.json — invoked directly per-task with -m so we
+// never touch the machine-wide ~/.config/opencode/opencode.json, which other
+// concurrent sessions/repos on this VM also read.
+const AGENT_MODEL = process.env.FREELANCE_BOT_MODEL || 'opencode-go/deepseek-v4.1-flash';
+
 function readToken() {
   if (process.env.FREELANCE_BOT_TOKEN) return process.env.FREELANCE_BOT_TOKEN.trim();
   return fs.readFileSync(TOKEN_FILE, 'utf8').trim();
@@ -78,31 +86,34 @@ function ensureWorkspace(profile) {
   const workDir = path.join(USERS_DIR, profile);
   fs.mkdirSync(path.join(workDir, 'intake'), { recursive: true });
 
-  // Minimal .mcp.json — ONLY this repo's own MCP server, nothing from
-  // trained-assist-agent. Self-contained on purpose.
-  const mcpConfig = {
-    mcpServers: {
+  // Project-local opencode.json — ONLY this repo's own MCP server, nothing from
+  // trained-assist-agent. opencode merges this with the machine-wide
+  // ~/.config/opencode/opencode.json rather than replacing it, so this is safe
+  // to write without touching that shared file.
+  const mcpEnv = {
+    USER_ID: profile,
+    USERS_DIR,
+    AGENT_TOKENS_DIR: path.join(DATA_DIR, 'agent-tokens'),
+    ...(process.env.OPENROUTER_API_KEY ? { OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY } : {}),
+  };
+  const opencodeConfig = {
+    $schema: 'https://opencode.ai/config.json',
+    mcp: {
       'freelance-skills': {
-        command: 'node',
-        args: [path.join(REPO_ROOT, 'src', 'mcp-skills', 'index.js')],
-        env: {
-          USER_ID: profile,
-          USERS_DIR,
-          HOME: os.homedir(),
-          PATH: process.env.PATH || '',
-          AGENT_TOKENS_DIR: path.join(DATA_DIR, 'agent-tokens'),
-          ...(process.env.OPENROUTER_API_KEY ? { OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY } : {}),
-        },
+        type: 'local',
+        command: ['node', path.join(REPO_ROOT, 'src', 'mcp-skills', 'index.js')],
+        environment: mcpEnv,
       },
     },
   };
-  fs.writeFileSync(path.join(workDir, '.mcp.json'), JSON.stringify(mcpConfig, null, 2));
+  fs.writeFileSync(path.join(workDir, 'opencode.json'), JSON.stringify(opencodeConfig, null, 2));
   return workDir;
 }
 
-function runClaude(workDir, prompt) {
+function runAgent(workDir, prompt) {
   return new Promise((resolve) => {
-    const child = spawn('claude', ['--dangerously-skip-permissions', '--print', prompt], {
+    const args = ['run', '-m', AGENT_MODEL, '--auto', '--dir', workDir, prompt];
+    const child = spawn('opencode', args, {
       cwd: workDir,
       env: process.env,
       timeout: 10 * 60 * 1000,
@@ -111,9 +122,21 @@ function runClaude(workDir, prompt) {
     let err = '';
     child.stdout.on('data', d => { out += d.toString(); });
     child.stderr.on('data', d => { err += d.toString(); });
-    child.on('close', (code) => resolve({ code, out, err }));
+    child.on('close', (code) => resolve({ code, out: stripAnsi(out), err }));
     child.on('error', (e) => resolve({ code: -1, out, err: e.message }));
   });
+}
+
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+function stripAnsi(s) {
+  const lines = s.split('\n').map(line => line.replace(ANSI_RE, ''));
+  const out = [];
+  for (const line of lines) {
+    if (line.trim() === '' && out[out.length - 1] === '') continue; // collapse repeated blank lines
+    out.push(line);
+  }
+  return out.join('\n').trim();
 }
 
 // Telegram messages cap at 4096 chars — split on paragraph boundaries.
@@ -134,9 +157,28 @@ async function sendLong(chatId, text) {
   }
 }
 
+const WELCOME_TEXT = [
+  'Привет! Это фриланс-скилл: присылай сюда описания заказов, файлы, скриншоты —',
+  'разложу по проектам (факты/требования/наше решение отдельно) и дам GO/NO-GO риск-оценку.',
+  'Пиши обычным текстом, что нужно — не команду.',
+].join(' ');
+
 async function handleMessage(msg) {
   const chatId = msg.chat.id;
   const profile = profileForChat(chatId);
+
+  // Handle Telegram's own bot commands at the bot level, before ever reaching
+  // the agent — found the hard way that forwarding a leading "/" straight into
+  // an agent CLI's --print/run message gets misparsed as the CLI's OWN slash
+  // command (e.g. Claude Code's --print '/start' -> "Unknown command: /start"
+  // instead of being treated as plain user text).
+  if (msg.text && /^\/start\b/.test(msg.text.trim())) {
+    console.log(`[bot] /start from chat ${chatId}`);
+    ensureWorkspace(profile);
+    await tg('sendMessage', { chat_id: chatId, text: WELCOME_TEXT });
+    return;
+  }
+
   const workDir = ensureWorkspace(profile);
 
   let taskParts = [];
@@ -165,8 +207,10 @@ async function handleMessage(msg) {
   const task = taskParts.join('\n').trim();
   if (!task) return;
 
+  console.log(`[bot] chat ${chatId}: running (${task.length} chars)`);
   await tg('sendMessage', { chat_id: chatId, text: '⏳ Обрабатываю...' });
-  const { code, out, err } = await runClaude(workDir, task);
+  const { code, out, err } = await runAgent(workDir, task);
+  console.log(`[bot] chat ${chatId}: done, code=${code}, out=${out.length} chars, err=${err.length} chars`);
   if (code !== 0 && !out) {
     await sendLong(chatId, `❌ Ошибка (code ${code}): ${err.slice(0, 1500) || '(нет вывода)'}`);
     return;
@@ -204,7 +248,8 @@ async function poll() {
       writeState(state);
       if (u.message) {
         const chatId = u.message.chat.id;
-        enqueue(chatId, () => handleMessage(u.message)).catch(e => console.error('[bot] handleMessage error:', e.message));
+        console.log(`[bot] update ${u.update_id} from chat ${chatId}: ${(u.message.text || '[non-text]').slice(0, 80)}`);
+        enqueue(chatId, () => handleMessage(u.message)).catch(e => console.error('[bot] handleMessage error:', e.message, e.stack));
       }
     }
   }

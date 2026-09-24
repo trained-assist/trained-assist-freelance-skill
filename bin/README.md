@@ -29,6 +29,17 @@ cd ~/trained-assist-freelance-skill && git pull
 sudo systemctl restart freelance-bot
 ```
 
+## Agent backend
+
+Runs on `opencode` + DeepSeek (`opencode-go/deepseek-v4.1-flash` by default,
+override with `FREELANCE_BOT_MODEL`) instead of Claude Code — much cheaper for
+this bot's volume. Uses the VM's existing `opencode-go` auth
+(`~/.local/share/opencode/auth.json`, already set up for other tools on this
+VM) and writes a project-local `opencode.json` per chat workspace declaring
+only this repo's own MCP server — it does **not** touch the machine-wide
+`~/.config/opencode/opencode.json`, which other concurrent sessions/repos on
+this VM also read from.
+
 ## Data layout
 
 ```
