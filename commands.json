@@ -3,7 +3,6 @@
   "_comment": "Domain-owned Telegram command surface for the freelance skill. Single source of truth for the standalone bot; the shared agent/gateway should consume this declaration for the freelance audience instead of hardcoding freelance commands (avoids abstraction leakage into the generic bot). handler: 'local' = handled by the bot itself; 'tool' = maps to an MCP tool. argMode: 'first' = first whitespace token; 'rest' = the whole remainder.",
   "commands": [
     { "command": "start", "description": "Приветствие и список команд", "handler": "local" },
-    { "command": "help", "description": "Список команд и примеры", "handler": "local" },
 
     { "command": "projects", "description": "Список всех проектов", "handler": "tool", "tool": "freelance_list", "arg": null },
     { "command": "project", "description": "Контекст проекта: /project <slug>", "handler": "tool", "tool": "freelance_get_project", "arg": "project_id", "argMode": "first", "usage": "Использование: /project <slug>. Список проектов: /projects" },
@@ -18,6 +17,8 @@
     { "command": "spec_generation_defaults", "description": "Текущие настройки генерации ТЗ", "handler": "tool", "tool": "freelance_spec_generation_defaults", "arg": null },
     { "command": "spec_generation_explained", "description": "Как работает генерация ТЗ", "handler": "tool", "tool": "freelance_spec_generation_explained", "arg": null },
 
-    { "command": "remember", "description": "Запомнить правило генерации (профиль / проект)", "handler": "local", "usage": "Использование: /remember <текст> — для профиля; /remember <slug> <текст> — для проекта" }
+    { "command": "remember", "description": "Запомнить правило генерации (профиль / проект)", "handler": "local", "usage": "Использование: /remember <текст> — для профиля; /remember <slug> <текст> — для проекта" },
+
+    { "command": "help", "description": "Список команд и примеры", "handler": "local" }
   ]
 }
