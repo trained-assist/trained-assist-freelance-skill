@@ -1,0 +1,18 @@
+[Unit]
+Description=Freelance skill standalone Telegram bot (trained-assist-freelance-skill)
+After=network.target
+
+[Service]
+Type=simple
+User=vova
+WorkingDirectory=/home/vova/trained-assist-freelance-skill
+Environment=FREELANCE_BOT_DATA_DIR=/home/vova/freelance-bot-data
+Environment=FREELANCE_BOT_TOKEN_FILE=/home/vova/freelance-bot-data/bot-token
+ExecStart=/usr/bin/node /home/vova/trained-assist-freelance-skill/bin/bot.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+{
+  "name": "trained-assist-freelance-skill",
+  "version": "0.1.0",
+  "description": "Freelance project intake & analysis skill — provenance/facts/requirements/solution pipeline, multi-project store, GO/NO-GO risk scoring, incoming-document classifier. Domain skill server, sibling to trained-assist-agent.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node -e \"require('fs').readdirSync('src/mcp-skills/tools').forEach(f => require('./src/mcp-skills/tools/'+f))\""
+  },
+  "devDependencies": {}
+}
