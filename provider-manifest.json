@@ -88,7 +88,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "status": { "type": "string", "enum": ["active", "won", "lost", "archived"] }
+          "status": { "type": "string", "enum": ["active", "won", "lost", "archived"] },
+          "since": { "type": "string", "description": "Окно по updatedAt: 6h | 2h | today | YYYY-MM-DD..YYYY-MM-DD" }
         }
       },
       "allowedTriggers": ["user"],
@@ -116,7 +117,53 @@
         "type": "object",
         "required": ["project_id"],
         "properties": {
-          "project_id": { "type": "string" }
+          "project_id": { "type": "string" },
+          "variants": { "type": "string", "enum": ["both", "long", "short"], "description": "Какие версии генерировать (по умолчанию both)" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_get_spec",
+      "inputSchema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "variant": { "type": "string", "enum": ["both", "long", "short"] }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_generation_note",
+      "inputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string" },
+          "project_id": { "type": "string" },
+          "mode": { "type": "string", "enum": ["append", "replace"] }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "write",
+      "requiresApproval": false,
+      "retrySafety": "unsafe"
+    },
+    {
+      "name": "freelance_generate_all",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "since": { "type": "string", "description": "6h (по умолчанию) | 2h | today | YYYY-MM-DD..YYYY-MM-DD" },
+          "variants": { "type": "string", "enum": ["both", "long", "short"] }
         }
       },
       "allowedTriggers": ["user"],

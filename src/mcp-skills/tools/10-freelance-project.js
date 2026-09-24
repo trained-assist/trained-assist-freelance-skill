@@ -19,7 +19,11 @@ const path = require('path');
 
 const USER_ID = process.env.USER_ID || process.env.AGENT_USER_ID || '';
 
-const { freelanceRoot, indexPath, projectDir, projectFile, ensureDir } = require('../lib/paths');
+const {
+  freelanceRoot, indexPath, projectDir, projectFile, ensureDir,
+  specDir, specFile, specSourcePath, legacySpecFile,
+  profileGenerationNotePath, projectGenerationNotePath, SPEC_VARIANTS,
+} = require('../lib/paths');
 const { slugify } = require('../lib/slug');
 const riskEngine = require('../lib/risk-engine');
 const sheets = require('../lib/sheets');
@@ -190,6 +194,84 @@ function buildPlanTab(proj) {
   return rows;
 }
 
+// ── Spec generation helpers ──────────────────────────────────────────────────
+
+// These rules turn the output into a specification about the SYSTEM, not a recap
+// of the client conversation. The old single-prompt version only forbade "клиент
+// сказал" — yet the generated ТЗ still carried chronology, provenance references
+// and meta-sections ("допущения и почему они здесь"), because the stage files it
+// was fed were themselves written as a chronological log. The fix is two-fold:
+// normalize the source first, and state the ban explicitly on every axis.
+const SPEC_VOICE_RULES = [
+  'Голос документа — техническое задание о СИСТЕМЕ, а не конспект общения с заказчиком.',
+  'ЗАПРЕЩЕНО: «клиент сказал/подтвердил/уточнил», «заказчик хочет/прислал», «из разговора следует», хронология обсуждения, пересказ истории переписки, ссылки на провенанс/ID источников (P-001, R-04 и т.п.), мета-разделы вида «почему это здесь», «наши допущения и их основания», «что нужно подтвердить у клиента».',
+  'Требования формулируй в утвердительной форме о системе: «Система должна …», «Реализовать …» — без атрибуции источника.',
+  'Неподтверждённое требование выноси коротким пунктом в раздел «Открытые вопросы»; НЕ пиши «нужно подтвердить у клиента» внутри требований.',
+  'Не выдумывай факты, числа, сроки, интеграции — только то, что есть в предоставленном контексте.',
+].join('\n');
+
+function readGenerationNotes(slug) {
+  const read = (p) => { try { return fs.readFileSync(p, 'utf8').trim(); } catch { return ''; } };
+  return {
+    profile: read(profileGenerationNotePath(USER_ID)),
+    project: slug ? read(projectGenerationNotePath(USER_ID, slug)) : '',
+  };
+}
+
+function writeGenerationNote(file, text, mode) {
+  ensureDir(path.dirname(file));
+  if (mode === 'replace') {
+    fs.writeFileSync(file, String(text).trim() + '\n');
+  } else {
+    const prev = (() => { try { return fs.readFileSync(file, 'utf8').trim(); } catch { return ''; } })();
+    fs.writeFileSync(file, (prev ? prev + '\n' : '') + `- ${String(text).trim()}\n`);
+  }
+  return fs.readFileSync(file, 'utf8').trim();
+}
+
+// `since` accepts '30m' | '2h' | '6h' | '2d' | 'today'/'сегодня' |
+// 'YYYY-MM-DD..YYYY-MM-DD'. Empty/missing → last 6 hours (batch default).
+function parseSince(since) {
+  const now = Date.now();
+  const s = String(since || '').trim().toLowerCase();
+  let m;
+  if (!s) return { from: now - 6 * 3600e3, to: null, label: 'последние 6 часов' };
+  if ((m = s.match(/^(\d+)\s*m/))) return { from: now - (+m[1]) * 60e3, to: null, label: `последние ${m[1]} мин` };
+  if ((m = s.match(/^(\d+)\s*h/))) return { from: now - (+m[1]) * 3600e3, to: null, label: `последние ${m[1]} ч` };
+  if ((m = s.match(/^(\d+)\s*d/))) return { from: now - (+m[1]) * 86400e3, to: null, label: `последние ${m[1]} сут` };
+  if (s === 'today' || s === 'сегодня') { const d = new Date(); d.setHours(0, 0, 0, 0); return { from: d.getTime(), to: null, label: 'за сегодня' }; }
+  if ((m = s.match(/^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/))) {
+    return { from: Date.parse(`${m[1]}T00:00:00`), to: Date.parse(`${m[2]}T23:59:59`), label: `${m[1]}..${m[2]}` };
+  }
+  return { from: now - 6 * 3600e3, to: null, label: 'последние 6 часов', invalid: true };
+}
+
+function buildSpecInstruction(proj, variants, paths, notes) {
+  const lines = [];
+  lines.push(`Сгенерируй ТЗ для проекта «${proj.name}» (${variants.join(' + ')}).`);
+  lines.push('');
+  lines.push(`ШАГ 1 — нормализация (обязательно). По источникам ниже запиши в ${specSourcePath(USER_ID, proj.slug)} нормализованный рабочий контекст: атомарные требования (пронумеруй R-01, R-02…, в утвердительной форме о системе), факты о системе и ограничения, техническое решение. В нормализацию НЕ переноси хронологию общения, «клиент сказал», пересказ переписки и обоснования-провенанс — они остаются только в provenance/ как traceability.`);
+  lines.push('');
+  lines.push('ШАГ 2 — генерация. Каждый запрошенный документ генерируй НЕЗАВИСИМО из нормализованного контекста (spec/_source.md). Long и Short — самостоятельные версии из одного контекста, а НЕ «short = сжатие long»: подача и акценты могут отличаться.');
+  lines.push('');
+  lines.push('Правила документа (обязательно):');
+  lines.push(SPEC_VOICE_RULES);
+  lines.push('');
+  lines.push('Варианты:');
+  lines.push('- long — подробное ТЗ для исполнителя: цель, объём, функциональные и нефункциональные требования, интеграции, этапы, сроки, критерии приёмки.');
+  lines.push('- short — самостоятельное краткое ТЗ для заказчика: проблема, объём, сроки, цена, ключевые риски, результат; без архитектурных деталей и без «конспекта» long.');
+  lines.push('');
+  lines.push('Куда писать (markdown, только эти пути, без преамбул от себя):');
+  for (const v of variants) lines.push(`- ${v}: ${paths[v]}`);
+  if (notes.profile || notes.project) {
+    lines.push('');
+    lines.push('Постоянные инструкции пользователя (приоритет над шаблоном):');
+    if (notes.profile) lines.push(`[профиль] ${notes.profile}`);
+    if (notes.project) lines.push(`[проект] ${notes.project}`);
+  }
+  return lines.join('\n');
+}
+
 // ── Tools ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -268,7 +350,7 @@ module.exports = {
       description: [
         'Добавить информацию к проекту в ОДНУ конкретную стадию pipeline — это то, что не даёт фактам/требованиям/решению смешаться.',
         'stage=fact — только проверяемый факт (авто-логируется в provenance с указанным source/reliability).',
-        'stage=requirement — то, что хочет/требует клиент (даже если он продиктовал технические детали — это всё ещё требование, не решение).',
+        'stage=requirement — требование к системе в утвердительной форме («Система должна …»), без «клиент сказал»; даже если клиент продиктовал технические детали — это требование, не решение. Атрибуция источника остаётся в provenance.',
         'stage=interpretation — наше предположение, ещё не подтверждённое клиентом.',
         'stage=solution — ТОЛЬКО наша инженерная часть, без "клиент сказал".',
         'stage=qna — вопрос/ответ клиента.',
@@ -358,12 +440,33 @@ module.exports = {
     },
 
     freelance_list: {
-      description: 'Список всех фриланс-проектов профиля (из общего "Фриланс проекты" — видно из любого Telegram-топика/сессии этого профиля).',
-      inputSchema: { type: 'object', properties: { status: { type: 'string', enum: ['active', 'won', 'lost', 'archived'] } } },
-      handler: async ({ status } = {}) => {
+      description: [
+        'Список фриланс-проектов профиля (из общего "Фриланс проекты" — видно из любого Telegram-топика/сессии этого профиля).',
+        'Опционально `since` — окно по времени последнего обновления: "30m", "2h", "6h", "2d", "today"/"сегодня", либо "YYYY-MM-DD..YYYY-MM-DD".',
+        'Используй for batch-запросов вида «сделай все проекты за 2 часа».',
+      ].join(' '),
+      inputSchema: { type: 'object', properties: {
+        status: { type: 'string', enum: ['active', 'won', 'lost', 'archived'] },
+        since: { type: 'string', description: 'Окно по updatedAt: 6h | 2h | today | YYYY-MM-DD..YYYY-MM-DD' },
+      } },
+      handler: async ({ status, since } = {}) => {
         let list = readIndex();
         if (status) list = list.filter(p => p.status === status);
-        return { projects: list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)) };
+        let window = null;
+        if (since) {
+          const w = parseSince(since);
+          const to = w.to || Date.now() + 86400e3;
+          list = list.filter(p => { const t = new Date(p.updatedAt || 0).getTime(); return t >= w.from && t <= to; });
+          window = {
+            since, label: w.label, invalid: w.invalid || undefined,
+            from: new Date(w.from).toISOString(), to: w.to ? new Date(w.to).toISOString() : null,
+            count: list.length,
+          };
+        }
+        return {
+          projects: list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
+          ...(window ? { window, message: `Проектов за ${window.label}: ${window.count}.` } : {}),
+        };
       },
     },
 
@@ -389,22 +492,123 @@ module.exports = {
 
     freelance_generate_spec: {
       description: [
-        'Вернуть requirements.md + solution.md для генерации spec/tz.md — НИКОГДА не читай raw provenance/facts напрямую для текста ТЗ.',
-        'После получения ответа сформируй итоговый текст ТЗ и запиши его через Write в путь spec_path из ответа — этот тул сам файл не пишет,',
-        'т.к. формулировка ТЗ — генеративная задача, а не механическая склейка.',
+        'Подготовить генерацию ТЗ: возвращает нормализуемый контекст проекта (facts/requirements/interpretation/solution), persistent-инструкции и пути.',
+        'По умолчанию генерируются ДВА независимых документа — long.md и short.md (short НЕ является сжатием long: это самостоятельная версия из того же контекста).',
+        'Сам файлы не пишет — формулировка ТЗ генеративна; модель сначала нормализует контекст в spec/_source.md, затем пишет каждый вариант по своему пути.',
+        'Провенанс и qna в генерацию НЕ подаются: источники общения остаются traceability и в текст ТЗ не попадают.',
+        'variants: "both" (по умолчанию) | "long" | "short" — если пользователь явно попросил только одну версию.',
       ].join(' '),
-      inputSchema: { type: 'object', required: ['project_id'], properties: { project_id: { type: 'string' } } },
-      handler: async ({ project_id }) => {
+      inputSchema: { type: 'object', required: ['project_id'], properties: {
+        project_id: { type: 'string' },
+        variants: { type: 'string', enum: ['both', 'long', 'short'], description: 'Какие версии генерировать (по умолчанию both)' },
+      } },
+      handler: async ({ project_id, variants = 'both' }) => {
         const proj = readProject(project_id);
-        const requirements = fs.readFileSync(projectFile(USER_ID, project_id, 'requirements.md'), 'utf8');
-        const solution = fs.readFileSync(projectFile(USER_ID, project_id, 'solution.md'), 'utf8');
+        const want = variants === 'long' ? ['long'] : variants === 'short' ? ['short'] : ['long', 'short'];
+        const read = (f) => { try { return fs.readFileSync(projectFile(USER_ID, project_id, f), 'utf8'); } catch { return ''; } };
+        const sources = {
+          facts: read('facts.md'),
+          requirements: read('requirements.md'),
+          interpretation: read('interpretation.md'),
+          solution: read('solution.md'),
+        };
+        const notes = readGenerationNotes(project_id);
+        const paths = Object.fromEntries(want.map(v => [v, specFile(USER_ID, project_id, v)]));
         return {
-          project_id, name: proj.name,
-          requirements, solution,
-          spec_path: projectFile(USER_ID, project_id, 'spec', 'tz.md'),
-          instruction: 'Сгенерируй итоговый клиентский документ ТЗ ИСКЛЮЧИТЕЛЬНО из requirements + solution выше. ' +
-            'Не упоминай происхождение информации ("клиент сказал", "из документа X") — это provenance, в ТЗ ему не место. ' +
-            'Запиши результат по пути spec_path.',
+          project_id, name: proj.name, variants: want,
+          spec_source_path: specSourcePath(USER_ID, project_id),
+          spec_paths: paths,
+          generation_notes: notes,
+          sources,
+          instruction: buildSpecInstruction(proj, want, paths, notes),
+        };
+      },
+    },
+
+    freelance_get_spec: {
+      description: [
+        'Вернуть текущий текст готового ТЗ (long/short) из spec/ для ТОЧЕЧНОГО РЕДАКТИРОВАНИЯ.',
+        'Используй, когда пользователь просит изменить существующий документ (убери раздел, добавь Y, перепиши блок, поменяй структуру, сделай менее формально, сократи, измени только Short, обнови обе версии).',
+        'Полученный текст правь и перезаписывай по тому же пути, НЕ перегенерируя проект с нуля и НЕ восстанавливая удалённое по шаблону.',
+      ].join(' '),
+      inputSchema: { type: 'object', required: ['project_id'], properties: {
+        project_id: { type: 'string' },
+        variant: { type: 'string', enum: ['both', 'long', 'short'], description: 'Что вернуть (по умолчанию both)' },
+      } },
+      handler: async ({ project_id, variant = 'both' }) => {
+        readProject(project_id);
+        const want = variant === 'long' ? ['long'] : variant === 'short' ? ['short'] : ['long', 'short'];
+        const docs = {}; const paths = {};
+        for (const v of want) {
+          const p = specFile(USER_ID, project_id, v);
+          let text = '';
+          try { text = fs.readFileSync(p, 'utf8'); } catch { /* not generated yet */ }
+          if (!text && v === 'long') {
+            // read-compat: the old single-document pipeline wrote spec/tz.md
+            try { text = fs.readFileSync(legacySpecFile(USER_ID, project_id), 'utf8'); } catch { /* none */ }
+          }
+          docs[v] = text; paths[v] = p;
+        }
+        return {
+          project_id, docs, spec_paths: paths,
+          instruction: 'Правь существующий текст по указанию пользователя и перезапиши его по ТОМУ ЖЕ пути через Write. ' +
+            'Пользовательская правка имеет приоритет над шаблоном: если просят убрать раздел — не восстанавливай его. ' +
+            'Не перегенерируй документ целиком без явной просьбы; не добавляй того, о чём не просили.',
+        };
+      },
+    },
+
+    freelance_generation_note: {
+      description: [
+        'Сохранить ПОСТОЯННУЮ инструкцию генерации ТЗ — она действует на все СЛЕДУЮЩИЕ генерации.',
+        'Без project_id — для всего профиля; с project_id — только для проекта (приоритет выше профиля).',
+        'Примеры: «всегда делай ТЗ техничнее», «никогда не писать „клиент сказал"», «не добавлять раздел X», «Short — максимально компактный».',
+        'Это НЕ разовая правка конкретного документа — для разовой используй freelance_get_spec.',
+      ].join(' '),
+      inputSchema: { type: 'object', required: ['text'], properties: {
+        text: { type: 'string', description: 'Инструкция пользователя' },
+        project_id: { type: 'string', description: 'Если задан — инструкция только для проекта' },
+        mode: { type: 'string', enum: ['append', 'replace'], description: 'append (по умолчанию) добавляет пункт; replace перезаписывает' },
+      } },
+      handler: async ({ text, project_id, mode = 'append' }) => {
+        if (project_id) readProject(project_id);
+        const file = project_id ? projectGenerationNotePath(USER_ID, project_id) : profileGenerationNotePath(USER_ID);
+        const note = writeGenerationNote(file, text, mode);
+        return { saved: true, scope: project_id || 'profile', path: file, note };
+      },
+    },
+
+    freelance_generate_all: {
+      description: [
+        'Batch: собрать проекты за период (по умолчанию — за последние 6 часов) и подготовить генерацию ТЗ для каждого.',
+        'Порядок ответа пользователю: сначала ОДНОЙ таблицей показать проекты с краткой оценкой/рисками, затем по каждому проекту сгенерировать запрошенные версии.',
+        'variants применяется ко всем; для исключений («Long только для проекта X») вызови freelance_generate_spec отдельно по нужному проекту.',
+        'Другой период — повторить вызов с другим since.',
+      ].join(' '),
+      inputSchema: { type: 'object', properties: {
+        since: { type: 'string', description: '6h (по умолчанию) | 2h | today | YYYY-MM-DD..YYYY-MM-DD' },
+        variants: { type: 'string', enum: ['both', 'long', 'short'] },
+      } },
+      handler: async ({ since, variants = 'both' } = {}) => {
+        const w = parseSince(since);
+        const to = w.to || Date.now() + 86400e3;
+        const list = readIndex().filter(p => { const t = new Date(p.updatedAt || 0).getTime(); return t >= w.from && t <= to; });
+        const want = variants === 'long' ? ['long'] : variants === 'short' ? ['short'] : ['long', 'short'];
+        const projects = list
+          .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+          .map(p => ({
+            project_id: p.slug, name: p.name, status: p.status, type: p.type, updatedAt: p.updatedAt,
+            spec_paths: Object.fromEntries(want.map(v => [v, specFile(USER_ID, p.slug, v)])),
+          }));
+        const label = w.invalid ? `${w.label} (период не распознан — по умолчанию)` : w.label;
+        return {
+          window: { since: since || null, label, from: new Date(w.from).toISOString(), to: w.to ? new Date(w.to).toISOString() : null, count: projects.length },
+          variants: want,
+          projects,
+          message: `Взял проекты за ${label}. Если нужен другой период — скажи.`,
+          instruction:
+            `Сначала покажи ОДНОЙ таблицей ${projects.length} проект(ов) за ${label} с краткой оценкой/рисками. ` +
+            `Затем по каждому проекту сгенерируй ${want.join(' + ')} по правилам freelance_generate_spec (сначала нормализация, затем каждая версия независимо).`,
         };
       },
     },

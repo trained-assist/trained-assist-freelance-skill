@@ -45,6 +45,45 @@ function projectFile(username, slug, ...segments) {
   return path.join(projectDir(username, slug), ...segments);
 }
 
+// ── Final-document paths (spec/) ─────────────────────────────────────────────
+// The spec pipeline produces two INDEPENDENT client-facing documents per project
+// (`long.md`, `short.md`), plus a normalized intermediate source (`_source.md`)
+// that is the single input both variants are generated from. Legacy single
+// `tz.md` is kept read-compatible (see freelance_get_spec).
+const SPEC_VARIANTS = ['long', 'short'];
+
+function specDir(username, slug) {
+  return projectFile(username, slug, 'spec');
+}
+
+function specFile(username, slug, variant) {
+  if (!SPEC_VARIANTS.includes(variant)) throw new Error(`Unknown spec variant: ${variant}`);
+  return projectFile(username, slug, 'spec', `${variant}.md`);
+}
+
+function legacySpecFile(username, slug) {
+  return projectFile(username, slug, 'spec', 'tz.md');
+}
+
+// Normalized requirements/solution context written before generation, so the
+// "source materials → normalized requirements → spec" split is persisted and
+// re-used by both variants.
+function specSourcePath(username, slug) {
+  return projectFile(username, slug, 'spec', '_source.md');
+}
+
+// ── Persistent generation notes ──────────────────────────────────────────────
+// One-time user instructions ("всегда делай ТЗ техничнее", "никогда не писать
+// «клиент сказал»"). Profile-level applies to every project of the profile;
+// project-level applies to one project and wins.
+function profileGenerationNotePath(username) {
+  return path.join(freelanceRoot(username), '_generation.md');
+}
+
+function projectGenerationNotePath(username, slug) {
+  return projectFile(username, slug, 'generation.md');
+}
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
   return dir;
@@ -53,11 +92,18 @@ function ensureDir(dir) {
 module.exports = {
   USERS_ROOT,
   FREELANCE_DIRNAME,
+  SPEC_VARIANTS,
   profileRoot,
   freelanceRoot,
   indexPath,
   recentContextPath,
   projectDir,
   projectFile,
+  specDir,
+  specFile,
+  legacySpecFile,
+  specSourcePath,
+  profileGenerationNotePath,
+  projectGenerationNotePath,
   ensureDir,
 };
