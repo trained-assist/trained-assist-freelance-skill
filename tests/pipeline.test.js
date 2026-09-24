@@ -126,6 +126,8 @@ test('freelance_generate_spec returns independent variants, source path, and nev
   assert.doesNotMatch(JSON.stringify(r.sources), /QNA_MARKER/, 'qna (conversation log) must not be fed into spec generation');
   assert.match(r.instruction, /НЕЗАВИСИМО/);
   assert.match(r.instruction, /ШАГ 1/, 'must include the explicit normalization step');
+  assert.match(r.instruction, /НЕ конспект созвона или переписки/, 'spec must not read as a call summary');
+  assert.match(r.instruction, /Input Info/, 'must forbid source/transcript sections');
 
   const onlyLong = await registry.callTool('freelance_generate_spec', { project_id, variants: 'long' });
   assert.deepEqual(onlyLong.variants, ['long']);
