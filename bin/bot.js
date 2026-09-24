@@ -31,6 +31,183 @@ const TOKEN_FILE = process.env.FREELANCE_BOT_TOKEN_FILE || path.join(DATA_DIR, '
 // concurrent sessions/repos on this VM also read.
 const AGENT_MODEL = process.env.FREELANCE_BOT_MODEL || 'opencode-go/deepseek-v4.1-flash';
 
+// ── Telegram commands ────────────────────────────────────────────────────────
+// Registered via setMyCommands at startup so the command list shows in the app.
+// Commands map to the skill's own MCP tools (runMcpTool) — deterministic quick
+// answers, no opencode spawn. Later, once the freelance source is wired into the
+// Control Plane (trained-assist-agent#1271), the same commands go through
+// /quick + invokeAction; the dropdown list stays valid either way.
+
+const COMMANDS = [
+  { command: 'start', description: 'Приветствие и список команд' },
+  { command: 'help', description: 'Список команд и примеры' },
+  { command: 'projects', description: 'Список всех проектов' },
+  { command: 'project', description: 'Контекст проекта: /project <slug>' },
+  { command: 'new', description: 'Новый проект: /new Название: описание' },
+  { command: 'add', description: 'Добавить в проект: /add <slug> <стадия> <текст>' },
+  { command: 'risk', description: 'Риск-оценка: /risk <slug>' },
+  { command: 'questions', description: 'Открытые вопросы: /questions <slug>' },
+  { command: 'classify', description: 'Классифицировать текст: /classify <текст>' },
+  { command: 'folder', description: 'Папка Drive для таблиц: /folder <id>' },
+  { command: 'spec', description: 'Исходники для ТЗ: /spec <slug>' },
+];
+
+const STAGES = ['fact', 'requirement', 'interpretation', 'solution', 'qna'];
+
+const HELP_TEXT = [
+  'Я — фриланс-скилл: раскладываю заказы по проектам (факты/требования/решение) и даю GO/NO-GO риск-оценку.',
+  '',
+  'Команды:',
+  '/projects — список проектов',
+  '/project <slug> — полный контекст проекта',
+  '/new Название: описание — создать проект (тип по умолчанию default)',
+  '/add <slug> <стадия> <текст> — добавить инфо (стадии: ' + STAGES.join(', ') + ')',
+  '/risk <slug> — пересчитать риск-оценку',
+  '/questions <slug> — открытые вопросы по проекту',
+  '/classify <текст> — к какому проекту относится текст',
+  '/folder <folder_id> — папка Google Drive для таблиц',
+  '/spec <slug> — исходники (requirements + solution) для ТЗ',
+  '',
+  'Или просто присылай описания заказов и файлы — сам разложу.',
+].join('\n');
+
+const USAGE = {
+  project: 'Использование: /project <slug>. Список проектов: /projects',
+  new: 'Использование: /new Название проекта: описание задачи',
+  add: `Использование: /add <slug> <стадия> <текст>. Стадии: ${STAGES.join(', ')}`,
+  risk: 'Использование: /risk <slug>',
+  questions: 'Использование: /questions <slug>',
+  classify: 'Использование: /classify <текст документа/сообщения>',
+  folder: 'Использование: /folder <folder_id из Google Drive>',
+  spec: 'Использование: /spec <slug>',
+};
+
+// Call one of the skill's own MCP tools in a fresh child process (like the MCP
+// server would be spawned), with per-chat USER_ID/USERS_DIR env. Reuses the exact
+// same code path the agent uses — no copy-pasted logic, no opencode cost.
+function runMcpTool(profile, toolName, args = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [path.join(REPO_ROOT, 'src', 'mcp-skills', 'index.js')], {
+      env: {
+        ...process.env,
+        USER_ID: profile,
+        USERS_DIR,
+        AGENT_TOKENS_DIR: path.join(DATA_DIR, 'agent-tokens'),
+        ...(process.env.OPENROUTER_API_KEY ? { OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY } : {}),
+      },
+    });
+    let out = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true; child.kill();
+      reject(new Error(`MCP tool timeout (${toolName})`));
+    }, 60000);
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.on('error', e => { if (!settled) { settled = true; clearTimeout(timer); reject(e); } });
+    child.on('close', () => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      try {
+        const lines = out.split('\n').filter(Boolean).map(l => JSON.parse(l));
+        const resp = lines.find(l => l.id === 1) || lines[lines.length - 1];
+        if (resp?.error) return reject(new Error(resp.error.message || JSON.stringify(resp.error)));
+        resolve(resp?.result?.content?.[0]?.text ?? '(пустой ответ)');
+      } catch (e) {
+        reject(new Error(`MCP parse error: ${e.message} | out: ${out.slice(0, 400)}`));
+      }
+    });
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: toolName, arguments: args } }) + '\n');
+    child.stdin.end();
+  });
+}
+
+async function handleCommand(chatId, profile, text) {
+  // Telegram may deliver as /cmd@BotName — strip the @suffix.
+  const match = text.match(/^\/([A-Za-z0-9_]+)(?:@[A-Za-z0-9_]+)?\s*([\s\S]*)$/);
+  if (!match) return false;
+  const cmd = match[1].toLowerCase();
+  const rest = (match[2] || '').trim();
+
+  if (cmd === 'start') {
+    await tg('sendMessage', { chat_id: chatId, text: WELCOME_TEXT });
+    return true;
+  }
+  if (cmd === 'help') {
+    await sendLong(chatId, HELP_TEXT);
+    return true;
+  }
+
+  const toolOf = {
+    projects: { tool: 'freelance_list', args: {} },
+    project: { tool: 'freelance_get_project', args: { project_id: rest.split(/\s+/)[0] } },
+    risk: { tool: 'freelance_assess', args: { project_id: rest.split(/\s+/)[0] } },
+    questions: { tool: 'freelance_questions', args: { project_id: rest.split(/\s+/)[0] } },
+    folder: { tool: 'freelance_set_folder', args: { folder_id: rest.split(/\s+/)[0] } },
+    classify: { tool: 'freelance_classify_document', args: { text: rest } },
+    spec: { tool: 'freelance_generate_spec', args: { project_id: rest.split(/\s+/)[0] } },
+  };
+
+  if (toolOf[cmd]) {
+    const { tool, args } = toolOf[cmd];
+    if (cmd !== 'projects' && cmd !== 'classify' && !args.project_id && cmd !== 'folder') {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE[cmd] });
+      return true;
+    }
+    if (cmd === 'classify' && !rest) {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE.classify });
+      return true;
+    }
+    try {
+      const result = await runMcpTool(profile, tool, args);
+      await sendLong(chatId, result);
+    } catch (e) {
+      await sendLong(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (cmd === 'new') {
+    const idx = rest.indexOf(':');
+    const name = (idx > 0 ? rest.slice(0, idx) : rest).trim();
+    const description = (idx > 0 ? rest.slice(idx + 1) : rest).trim();
+    if (!name) {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE.new });
+      return true;
+    }
+    try {
+      const result = await runMcpTool(profile, 'freelance_new_project', { name, description, type: 'default' });
+      await sendLong(chatId, result);
+    } catch (e) {
+      await sendLong(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  if (cmd === 'add') {
+    const [slug, stage, ...contentParts] = rest.split(/\s+/);
+    const content = contentParts.join(' ');
+    if (!slug || !stage || !content) {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE.add });
+      return true;
+    }
+    if (!STAGES.includes(stage)) {
+      await tg('sendMessage', { chat_id: chatId, text: `Неизвестная стадия «${stage}». Допустимые: ${STAGES.join(', ')}` });
+      return true;
+    }
+    try {
+      const result = await runMcpTool(profile, 'freelance_add_info', { project_id: slug, stage, content });
+      await sendLong(chatId, result);
+    } catch (e) {
+      await sendLong(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  await tg('sendMessage', { chat_id: chatId, text: `Неизвестная команда /${cmd}. Список: /help` });
+  return true;
+}
+
 function readToken() {
   if (process.env.FREELANCE_BOT_TOKEN) return process.env.FREELANCE_BOT_TOKEN.trim();
   return fs.readFileSync(TOKEN_FILE, 'utf8').trim();
@@ -171,11 +348,11 @@ async function handleMessage(msg) {
   // the agent — found the hard way that forwarding a leading "/" straight into
   // an agent CLI's --print/run message gets misparsed as the CLI's OWN slash
   // command (e.g. Claude Code's --print '/start' -> "Unknown command: /start"
-  // instead of being treated as plain user text).
-  if (msg.text && /^\/start\b/.test(msg.text.trim())) {
-    console.log(`[bot] /start from chat ${chatId}`);
-    ensureWorkspace(profile);
-    await tg('sendMessage', { chat_id: chatId, text: WELCOME_TEXT });
+  // instead of being treated as plain user text). All registered commands are
+  // handled as quick answers via the skill's MCP tools (runMcpTool); anything
+  // unrecognized gets the command list, not forwarded into the agent.
+  if (msg.text && msg.text.trim().startsWith('/')) {
+    await handleCommand(chatId, profile, msg.text.trim());
     return;
   }
 
@@ -257,4 +434,11 @@ async function poll() {
 
 console.log(`[bot] starting, data dir: ${DATA_DIR}`);
 fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// Register the command list once at startup so it shows in the Telegram app's
+// "/" menu. Non-fatal if the API rejects it (token/bot name race on first boot).
+tg('setMyCommands', { commands: COMMANDS })
+  .then(r => console.log(`[bot] setMyCommands: ${r.ok ? 'ok' : JSON.stringify(r)}`))
+  .catch(e => console.error('[bot] setMyCommands error:', e.message));
+
 poll();

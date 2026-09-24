@@ -40,6 +40,32 @@ only this repo's own MCP server — it does **not** touch the machine-wide
 `~/.config/opencode/opencode.json`, which other concurrent sessions/repos on
 this VM also read from.
 
+## Telegram commands
+
+Registered at bot startup via `setMyCommands` (shows in the "/" menu). Every
+command is handled as a **quick answer** — the bot calls the skill's own MCP
+tools directly (`runMcpTool`, a fresh `src/mcp-skills/index.js` child per call),
+no opencode spawn, zero LLM tokens. Plain (non-command) messages still go to
+the agent as before.
+
+| Command | Maps to | Notes |
+|---------|---------|-------|
+| `/start` | — | welcome text |
+| `/help` | — | command list + examples |
+| `/projects` | `freelance_list` | |
+| `/project <slug>` | `freelance_get_project` | full context dump |
+| `/new Название: описание` | `freelance_new_project` | type=`default` |
+| `/add <slug> <стадия> <текст>` | `freelance_add_info` | стадии: fact/requirement/interpretation/solution/qna |
+| `/risk <slug>` | `freelance_assess` | |
+| `/questions <slug>` | `freelance_questions` | |
+| `/classify <текст>` | `freelance_classify_document` | needs OpenRouter key |
+| `/folder <id>` | `freelance_set_folder` | |
+| `/spec <slug>` | `freelance_generate_spec` | returns requirements+solution for ТЗ |
+
+Slash commands are intentionally **never** forwarded into the agent CLI — a
+leading `/` gets misparsed as the CLI's own command (see bot.js `/start`
+comment). Unknown `/cmd` → `/help` text, not agent.
+
 ## Data layout
 
 ```
