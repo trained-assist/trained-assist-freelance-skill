@@ -594,7 +594,7 @@ module.exports = {
         if (project_id) readProject(project_id);
         const file = project_id ? projectGenerationNotePath(USER_ID, project_id) : profileGenerationNotePath(USER_ID);
         const note = writeGenerationNote(file, text, mode);
-        return { saved: true, scope: project_id || 'profile', path: file, note };
+        return { saved: true, scope: project_id || 'profile', path: file, note, text: `✅ Запомнил (${project_id || 'профиль'}):\n${note}` };
       },
     },
 

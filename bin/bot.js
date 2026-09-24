@@ -184,6 +184,29 @@ async function handleCommand(chatId, profile, text) {
     return true;
   }
 
+  if (cmd === 'remember') {
+    if (!rest) {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE.remember || 'Использование: /remember <текст> — профиль; /remember <slug> <текст> — проект' });
+      return true;
+    }
+    // Project scope when the first token is an existing project slug, else profile scope.
+    let project_id = null;
+    let noteText = rest;
+    try {
+      const list = JSON.parse(await runMcpTool(profile, 'freelance_list', {}));
+      const slugs = new Set((list.projects || []).map(p => p.project_id));
+      const first = rest.split(/\s+/)[0];
+      if (slugs.has(first)) { project_id = first; noteText = rest.slice(first.length).trim(); }
+    } catch { /* fall back to profile scope */ }
+    try {
+      const result = await runMcpTool(profile, 'freelance_generation_note', project_id ? { project_id, text: noteText } : { text: noteText });
+      await sendLong(chatId, extractText(result));
+    } catch (e) {
+      await sendLong(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
   await tg('sendMessage', { chat_id: chatId, text: `Неизвестная команда /${cmd}. Список: /help` });
   return true;
 }

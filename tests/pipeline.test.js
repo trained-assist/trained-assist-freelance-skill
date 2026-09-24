@@ -225,6 +225,15 @@ test('commands.json is the domain-owned command surface and maps only to existin
     spec.commands.filter(c => c.command.startsWith('spec_generation')).map(c => c.command),
     ['spec_generation_defaults', 'spec_generation_explained'],
   );
+  assert.ok(spec.commands.some(c => c.command === 'remember' && c.handler === 'local'), '/remember must be a local command');
+});
+
+test('freelance_generation_note returns a readable confirmation', async () => {
+  const registry = freshEnv();
+  await registry.callTool('freelance_new_project', { name: 'R', description: 'x' });
+  const r = await registry.callTool('freelance_generation_note', { text: 'всегда md' });
+  assert.match(r.text, /Запомнил/);
+  assert.match(r.note, /всегда md/);
 });
 
 test('a broken/truncated LLM response never gets silently treated as "definitely new" — regression for the duplicate-lead bug found in real testing', async () => {

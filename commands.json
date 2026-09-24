@@ -16,6 +16,8 @@
     { "command": "spec", "description": "Исходники для ТЗ: /spec <slug>", "handler": "tool", "tool": "freelance_generate_spec", "arg": "project_id", "argMode": "first", "usage": "Использование: /spec <slug>" },
 
     { "command": "spec_generation_defaults", "description": "Текущие настройки генерации ТЗ", "handler": "tool", "tool": "freelance_spec_generation_defaults", "arg": null },
-    { "command": "spec_generation_explained", "description": "Как работает генерация ТЗ", "handler": "tool", "tool": "freelance_spec_generation_explained", "arg": null }
+    { "command": "spec_generation_explained", "description": "Как работает генерация ТЗ", "handler": "tool", "tool": "freelance_spec_generation_explained", "arg": null },
+
+    { "command": "remember", "description": "Запомнить правило генерации (профиль / проект)", "handler": "local", "usage": "Использование: /remember <текст> — для профиля; /remember <slug> <текст> — для проекта" }
   ]
 }
