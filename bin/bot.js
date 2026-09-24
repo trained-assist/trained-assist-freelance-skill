@@ -38,19 +38,13 @@ const AGENT_MODEL = process.env.FREELANCE_BOT_MODEL || 'opencode-go/deepseek-v4.
 // Control Plane (trained-assist-agent#1271), the same commands go through
 // /quick + invokeAction; the dropdown list stays valid either way.
 
-const COMMANDS = [
-  { command: 'start', description: 'Приветствие и список команд' },
-  { command: 'help', description: 'Список команд и примеры' },
-  { command: 'projects', description: 'Список всех проектов' },
-  { command: 'project', description: 'Контекст проекта: /project <slug>' },
-  { command: 'new', description: 'Новый проект: /new Название: описание' },
-  { command: 'add', description: 'Добавить в проект: /add <slug> <стадия> <текст>' },
-  { command: 'risk', description: 'Риск-оценка: /risk <slug>' },
-  { command: 'questions', description: 'Открытые вопросы: /questions <slug>' },
-  { command: 'classify', description: 'Классифицировать текст: /classify <текст>' },
-  { command: 'folder', description: 'Папка Drive для таблиц: /folder <id>' },
-  { command: 'spec', description: 'Исходники для ТЗ: /spec <slug>' },
-];
+// Command surface is DOMAIN-OWNED: commands.json is the single source of truth.
+// The shared agent/gateway should consume the same file for the freelance
+// audience instead of hardcoding freelance commands (avoids abstraction leakage
+// into the generic bot). This bot only renders/dispatches the declaration.
+const COMMAND_SPEC = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'commands.json'), 'utf8'));
+const COMMANDS = COMMAND_SPEC.commands.map(c => ({ command: c.command, description: c.description }));
+const USAGE = Object.fromEntries(COMMAND_SPEC.commands.filter(c => c.usage).map(c => [c.command, c.usage]));
 
 const STAGES = ['fact', 'requirement', 'interpretation', 'solution', 'qna'];
 
@@ -70,17 +64,6 @@ const HELP_TEXT = [
   '',
   'Или просто присылай описания заказов и файлы — сам разложу.',
 ].join('\n');
-
-const USAGE = {
-  project: 'Использование: /project <slug>. Список проектов: /projects',
-  new: 'Использование: /new Название проекта: описание задачи',
-  add: `Использование: /add <slug> <стадия> <текст>. Стадии: ${STAGES.join(', ')}`,
-  risk: 'Использование: /risk <slug>',
-  questions: 'Использование: /questions <slug>',
-  classify: 'Использование: /classify <текст документа/сообщения>',
-  folder: 'Использование: /folder <folder_id из Google Drive>',
-  spec: 'Использование: /spec <slug>',
-};
 
 // Call one of the skill's own MCP tools in a fresh child process (like the MCP
 // server would be spawned), with per-chat USER_ID/USERS_DIR env. Reuses the exact
@@ -138,29 +121,26 @@ async function handleCommand(chatId, profile, text) {
     return true;
   }
 
-  const toolOf = {
-    projects: { tool: 'freelance_list', args: {} },
-    project: { tool: 'freelance_get_project', args: { project_id: rest.split(/\s+/)[0] } },
-    risk: { tool: 'freelance_assess', args: { project_id: rest.split(/\s+/)[0] } },
-    questions: { tool: 'freelance_questions', args: { project_id: rest.split(/\s+/)[0] } },
-    folder: { tool: 'freelance_set_folder', args: { folder_id: rest.split(/\s+/)[0] } },
-    classify: { tool: 'freelance_classify_document', args: { text: rest } },
-    spec: { tool: 'freelance_generate_spec', args: { project_id: rest.split(/\s+/)[0] } },
-  };
+  const toolOf = {};
+  const requiredArg = {};
+  for (const c of COMMAND_SPEC.commands) {
+    if (c.handler !== 'tool') continue;
+    const args = {};
+    if (c.arg) args[c.arg] = c.argMode === 'rest' ? rest : rest.split(/\s+/)[0];
+    toolOf[c.command] = { tool: c.tool, args };
+    requiredArg[c.command] = c.arg || null;
+  }
 
   if (toolOf[cmd]) {
     const { tool, args } = toolOf[cmd];
-    if (cmd !== 'projects' && cmd !== 'classify' && !args.project_id && cmd !== 'folder') {
-      await tg('sendMessage', { chat_id: chatId, text: USAGE[cmd] });
-      return true;
-    }
-    if (cmd === 'classify' && !rest) {
-      await tg('sendMessage', { chat_id: chatId, text: USAGE.classify });
+    const req = requiredArg[cmd];
+    if (req && !args[req]) {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE[cmd] || `Использование: /${cmd}` });
       return true;
     }
     try {
       const result = await runMcpTool(profile, tool, args);
-      await sendLong(chatId, result);
+      await sendLong(chatId, extractText(result));
     } catch (e) {
       await sendLong(chatId, `❌ ${e.message}`);
     }
@@ -204,11 +184,32 @@ async function handleCommand(chatId, profile, text) {
     return true;
   }
 
-  // Unified fallback: an unregistered /command is not an error and is never
-  // answered with "unknown command" — hand the raw message to the agent as a
+  if (cmd === 'remember') {
+    if (!rest) {
+      await tg('sendMessage', { chat_id: chatId, text: USAGE.remember || 'Использование: /remember <текст> — профиль; /remember <slug> <текст> — проект' });
+      return true;
+    }
+    // Project scope when the first token is an existing project slug, else profile scope.
+    let project_id = null;
+    let noteText = rest;
+    try {
+      const list = JSON.parse(await runMcpTool(profile, 'freelance_list', {}));
+      const slugs = new Set((list.projects || []).map(p => p.project_id));
+      const first = rest.split(/\s+/)[0];
+      if (slugs.has(first)) { project_id = first; noteText = rest.slice(first.length).trim(); }
+    } catch { /* fall back to profile scope */ }
+    try {
+      const result = await runMcpTool(profile, 'freelance_generation_note', project_id ? { project_id, text: noteText } : { text: noteText });
+      await sendLong(chatId, extractText(result));
+    } catch (e) {
+      await sendLong(chatId, `❌ ${e.message}`);
+    }
+    return true;
+  }
+
+  // Unified fallback (main #14): an unregistered /command is not an error and is
+  // never answered with "unknown command" — hand the raw message to the agent as a
   // normal request so it interprets the command with its own capabilities.
-  // Generic by design (no per-command list): a future or agent-side command
-  // stays reachable without touching this router.
   const workDir = ensureWorkspace(profile);
   await dispatchToAgent(chatId, workDir, text);
   return true;
@@ -320,6 +321,13 @@ function stripAnsi(s) {
     out.push(line);
   }
   return out.join('\n').trim();
+}
+
+// Some MCP tools return a ready-to-read `text` field (e.g. the spec-generation
+// info commands) — show that text instead of raw JSON.
+function extractText(raw) {
+  try { const o = JSON.parse(raw); if (o && typeof o.text === 'string') return o.text; } catch { /* not json */ }
+  return raw;
 }
 
 // Telegram messages cap at 4096 chars — split on paragraph boundaries.
