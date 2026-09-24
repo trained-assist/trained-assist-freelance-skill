@@ -1,0 +1,168 @@
+{
+  "version": 2,
+  "providerId": "freelance",
+  "actions": [
+    {
+      "name": "freelance_new_project",
+      "inputSchema": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string", "description": "Название проекта" },
+          "description": { "type": "string", "description": "Всё что известно на этом этапе — попадёт в facts.md как первая запись" },
+          "type": { "type": "string", "enum": ["ai_simple", "integration", "ecommerce", "medtech", "academic", "default"], "description": "Тип проекта" },
+          "source": { "type": "string", "description": "Провенанс: chat/file/voice/screenshot/forwarded" },
+          "reliability": { "type": "string", "enum": ["high", "medium", "low"] },
+          "force_new": { "type": "boolean" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "write",
+      "requiresApproval": false,
+      "retrySafety": "idempotent"
+    },
+    {
+      "name": "freelance_add_info",
+      "inputSchema": {
+        "type": "object",
+        "required": ["project_id", "stage", "content"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "stage": { "type": "string", "enum": ["fact", "requirement", "interpretation", "solution", "qna"] },
+          "content": { "type": "string" },
+          "source": { "type": "string" },
+          "reliability": { "type": "string", "enum": ["high", "medium", "low"] },
+          "contradicts": { "type": "string" },
+          "hasTZ": { "type": "boolean" },
+          "valueClear": { "type": "boolean" },
+          "clientSeesResult": { "type": "boolean" },
+          "clientAnsweredQuestions": { "type": "boolean" },
+          "hasValueWording": { "type": "boolean" },
+          "prepaymentReady": { "type": "boolean" },
+          "hasClearDeadline": { "type": "boolean" },
+          "budgetConfirmed": { "type": "boolean" },
+          "scopeUnambiguous": { "type": "boolean" },
+          "deliveryAgreed": { "type": "boolean" },
+          "priceAgreed": { "type": "boolean" },
+          "integrationCount": { "type": "number" },
+          "hasMVP": { "type": "boolean" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "write",
+      "requiresApproval": false,
+      "retrySafety": "unsafe"
+    },
+    {
+      "name": "freelance_assess",
+      "inputSchema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "folder_id": { "type": "string" },
+          "spreadsheet_id": { "type": "string" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "write",
+      "requiresApproval": false,
+      "retrySafety": "idempotent"
+    },
+    {
+      "name": "freelance_questions",
+      "inputSchema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_list",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["active", "won", "lost", "archived"] }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_get_project",
+      "inputSchema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_generate_spec",
+      "inputSchema": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_set_folder",
+      "inputSchema": {
+        "type": "object",
+        "required": ["folder_id"],
+        "properties": {
+          "folder_id": { "type": "string" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "write",
+      "requiresApproval": false,
+      "retrySafety": "idempotent"
+    },
+    {
+      "name": "freelance_classify_document",
+      "inputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "description": "Текст документа/сообщения" },
+          "filename": { "type": "string", "description": "Имя файла — слабый сигнал" }
+        }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "write",
+      "requiresApproval": false,
+      "retrySafety": "unsafe"
+    }
+  ],
+  "contextFields": [
+    { "key": "freelance_project_count", "label": "Число фриланс-проектов профиля", "type": "number", "source": "capability" },
+    { "key": "recent_project", "label": "Последний обновлённый фриланс-проект", "type": "string", "source": "capability" },
+    { "key": "google_drive_folder", "label": "Папка Google Drive для таблиц фриланс-проектов", "type": "string", "source": "context_store" },
+    { "key": "drive_connection_status", "label": "Статус подключения Google Drive", "type": "string", "source": "capability" },
+    { "key": "classifier_ready", "label": "Классификатор документов доступен (есть OpenRouter ключ)", "type": "boolean", "source": "capability" }
+  ],
+  "connections": [
+    { "id": "gdrive", "label": "Google Drive (таблицы рисков)", "requiredFor": ["freelance_assess", "freelance_new_project"] },
+    { "id": "openrouter", "label": "OpenRouter (классификатор документов)", "requiredFor": ["freelance_classify_document"] }
+  ]
+}
