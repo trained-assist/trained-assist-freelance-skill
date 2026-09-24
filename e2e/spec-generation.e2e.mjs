@@ -28,16 +28,24 @@ const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
 function log(...a) { console.log('[e2e]', ...a); }
 function which(bin) { return spawnSync('sh', ['-c', `command -v ${bin}`]).status === 0; }
 
+const ENGINE_TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS || 8 * 60 * 1000);
+
 async function runEngine(workDir, prompt) {
   return await new Promise((resolve) => {
+    // stdin ignored: opencode must never block waiting on a TTY in a spawned test.
     const child = spawn('opencode', ['run', '-m', ENGINE_MODEL, '--auto', '--dir', workDir, prompt], {
-      cwd: workDir, env: process.env, timeout: 12 * 60 * 1000,
+      cwd: workDir, env: process.env, stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let out = '', err = '';
+    let out = '', err = '', done = false;
+    const finish = (r) => { if (!done) { done = true; clearTimeout(timer); resolve(r); } };
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* already gone */ }
+      finish({ code: null, signal: 'TIMEOUT', out, err });
+    }, ENGINE_TIMEOUT_MS);
     child.stdout.on('data', d => { out += d.toString(); });
     child.stderr.on('data', d => { err += d.toString(); });
-    child.on('close', code => resolve({ code, out, err }));
-    child.on('error', e => resolve({ code: -1, out, err: e.message }));
+    child.on('close', (code, signal) => finish({ code, signal, out, err }));
+    child.on('error', e => finish({ code: -1, signal: null, out, err: e.message }));
   });
 }
 
@@ -112,7 +120,7 @@ async function main() {
 
   log(`engine=${ENGINE_MODEL} judge=${JUDGE_MODEL} workdir=${workDir}`);
   const run = await runEngine(workDir, task);
-  if (run.code !== 0) log(`engine exit ${run.code}; tail: ${(run.err || run.out).slice(-400)}`);
+  if (run.code !== 0) log(`engine exit=${run.code}${run.signal ? ` signal=${run.signal}` : ''}; tail: ${(run.err || run.out).slice(-400)}`);
 
   const projectDir = firstProjectDir(usersDir, profile);
   const longPath = projectDir && path.join(projectDir, 'spec', 'long.md');
