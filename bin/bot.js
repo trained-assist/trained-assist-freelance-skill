@@ -204,7 +204,13 @@ async function handleCommand(chatId, profile, text) {
     return true;
   }
 
-  await tg('sendMessage', { chat_id: chatId, text: `Неизвестная команда /${cmd}. Список: /help` });
+  // Unified fallback: an unregistered /command is not an error and is never
+  // answered with "unknown command" — hand the raw message to the agent as a
+  // normal request so it interprets the command with its own capabilities.
+  // Generic by design (no per-command list): a future or agent-side command
+  // stays reachable without touching this router.
+  const workDir = ensureWorkspace(profile);
+  await dispatchToAgent(chatId, workDir, text);
   return true;
 }
 
@@ -384,6 +390,12 @@ async function handleMessage(msg) {
   const task = taskParts.join('\n').trim();
   if (!task) return;
 
+  await dispatchToAgent(chatId, workDir, task);
+}
+
+// Single place that actually runs the agent and streams its answer back — shared
+// by normal messages and by the unknown-command fallback in handleCommand.
+async function dispatchToAgent(chatId, workDir, task) {
   console.log(`[bot] chat ${chatId}: running (${task.length} chars)`);
   await tg('sendMessage', { chat_id: chatId, text: '⏳ Обрабатываю...' });
   const { code, out, err } = await runAgent(workDir, task);
