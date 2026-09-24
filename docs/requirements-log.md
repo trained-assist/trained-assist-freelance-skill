@@ -24,7 +24,20 @@
 - [ ] `планируется` scoped /tasks/stop + /quick audience
 - [ ] `планируется` E2E: main bot regression, freelance bot, restart через freelance bot
 
+## 2026-09-24 — генерация ТЗ (скилл подключён к агенту)
+
+- [x] `реализовано` freelance-скилл подключён к trained-assist-agent как MCP `freelance-skills` (agent #1330); проекты в `~/users/<profile>/Фриланс проекты/`
+- [x] `реализовано` независимые long/short: `freelance_generate_spec(variants)`, нормализация в `spec/_source.md`, short ≠ сжатие long (PR #15)
+- [x] `реализовано` ТЗ = ТЗ, не конспект: запрет «клиент сказал»/хронологии/провенанса/мета-разделов; отдельный запрет раздела «Input Info»/транскриптов (PR #16)
+- [x] `реализовано` правки существующего ТЗ без перегенерации: `freelance_get_spec` (правка > шаблон; read-compat с legacy `tz.md`)
+- [x] `реализовано` persistent-правила генерации: `freelance_generation_note` (профиль/проект) + команда `/remember`
+- [x] `реализовано` batch: `freelance_list({since})`, `freelance_generate_all` (по умолчанию 6ч + таблица проектов/рисков)
+- [x] `реализовано` доменный command surface: `commands.json` — единый источник; команды `/spec_generation_defaults`, `/spec_generation_explained`, `/remember`
+- [x] `реализовано` E2E-тест (issue #12): `npm run test:e2e` — фикстура «врачи» → реальный flow (opencode+MCP) → структурные проверки → LLM-судья; прогон PASS
+- [x] `реализовано` инцидент голосовых: на freelance-Worker'е не было `DEEPGRAM_API_KEY` → выставлен (см. tg-bot #246)
+- [ ] `планируется` тихий набор входного (всегда копим; ACK по all_on; TTL 6ч) — tg-bot #251
+- [ ] `планируется` E2E: main bot regression + restart через freelance bot; вынос общего runner'а (сейчас харнесс дублирует workspace/opencode из `bin/bot.js`)
+
 ## Отложено
 
 - [ ] `планируется` batch-leads smoke (projects_daily_2026-09-21_no_links.xlsx, ~600 строк)
-- [ ] `планируется` интеграция freelance-скилла как sibling MCP в trained-assist-agent (после закрытия #1271)
