@@ -272,6 +272,26 @@ function buildSpecInstruction(proj, variants, paths, notes) {
   return lines.join('\n');
 }
 
+// Last change to this skill's generation rules for the DEPLOYED revision. The
+// rules ship with the code (built/deployed from the repo), so the current git
+// commit is exactly what the generator was built from — surfacing it lets a user
+// see "the prompt changed" without trusting the conversation. Best-effort: null
+// when there is no git checkout (e.g. a tarball deploy).
+function lastGenerationChange() {
+  try {
+    const { execFileSync } = require('child_process');
+    const repoRoot = path.join(__dirname, '..', '..', '..');
+    const out = execFileSync('git', [
+      '-C', repoRoot, 'log', '-1', '--format=%h|%cs|%s', '--',
+      'src/mcp-skills/tools/10-freelance-project.js',
+    ], { encoding: 'utf8', timeout: 3000 }).trim();
+    const [sha, date, subject] = out.split('|');
+    return sha ? { sha, date, subject } : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Tools ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -621,6 +641,81 @@ module.exports = {
         ensureDir(path.dirname(f));
         fs.writeFileSync(f, JSON.stringify({ folder_id, updated_at: new Date().toISOString() }, null, 2));
         return { saved: true, folder_id };
+      },
+    },
+
+    freelance_spec_generation_defaults: {
+      description: [
+        'Показать текущие настройки/дефолты генерации ТЗ: формат вывода, какие версии генерируются, что по запросу,',
+        'persistent-инструкции профиля и проекта, и последнее изменение правил генерации.',
+        'Это команда только для чтения — ничего не меняет.',
+      ].join(' '),
+      inputSchema: { type: 'object', properties: { project_id: { type: 'string' } } },
+      handler: async ({ project_id } = {}) => {
+        if (project_id) readProject(project_id);
+        const notes = readGenerationNotes(project_id);
+        const lc = lastGenerationChange();
+        const defaults = {
+          output_format: 'только markdown (.md)',
+          variants: 'длинная (long) + короткая (short) по каждому проекту',
+          independence: 'long и short генерируются независимо (short — не сжатие long)',
+          on_request: 'риски и input-требования (source-requirements) — по запросу',
+          normalization: 'source → spec/_source.md (нормализация требований)',
+          batch_window: 'по умолчанию 6 часов',
+          forbidden_in_spec: '«клиент сказал», хронология, провенанс, мета-разделы',
+        };
+        const lines = [
+          '⚙️ Настройки генерации ТЗ (текущее)',
+          '',
+          `• Формат: ${defaults.output_format}`,
+          `• Версии: ${defaults.variants}`,
+          `• ${defaults.independence}`,
+          `• По запросу: ${defaults.on_request}`,
+          `• Нормализация: ${defaults.normalization}`,
+          `• Batch: ${defaults.batch_window}`,
+          `• В ТЗ запрещено: ${defaults.forbidden_in_spec}`,
+          '',
+          'Постоянные инструкции пользователя:',
+          `• профиль: ${notes.profile || '(нет)'}`,
+          `• проект: ${notes.project || '(нет)'}`,
+          '',
+          lc ? `Последнее изменение правил генерации: ${lc.sha} (${lc.date}) — ${lc.subject}` : 'Последнее изменение правил: нет данных (не git-чек).',
+        ].join('\n');
+        return { defaults, notes, last_change: lc, paths: {
+          profile: profileGenerationNotePath(USER_ID),
+          project: project_id ? projectGenerationNotePath(USER_ID, project_id) : null,
+        }, text: lines };
+      },
+    },
+
+    freelance_spec_generation_explained: {
+      description: 'Объяснить, как работает генерация ТЗ: пайплайн, нормализация, независимые long/short, persistent-инструкции, правки, batch, и последнее изменение правил.',
+      inputSchema: { type: 'object', properties: {} },
+      handler: async () => {
+        const lc = lastGenerationChange();
+        const text = [
+          '📄 Как работает генерация ТЗ',
+          '',
+          '1. Источники (диалог, файлы, скриншоты) → provenance/log.jsonl: это traceability, в текст ТЗ не попадает.',
+          '2. Факты/требования/интерпретация/решение → requirements — атомарные требования «Система должна …».',
+          '3. Нормализация → spec/_source.md: единый вход для обеих версий.',
+          '4. Генерация: long.md (для исполнителя) и short.md (для заказчика) — НЕЗАВИСИМО из одного контекста; short — не сжатие long.',
+          '5. В ТЗ нет «клиент сказал», хронологии, провенанса и мета-разделов; неподтверждённое — в «Открытые вопросы».',
+          '',
+          'Постоянные инструкции (действуют на все следующие генерации):',
+          '• профиль → Фриланс проекты/_generation.md',
+          '• проект → <project>/generation.md (приоритет выше)',
+          'Добавить: скажи боту словами («запомни: всегда делай ТЗ техничнее») или командой.',
+          '',
+          'Точечные правки (убери раздел, сократи, измени только Short) — правят существующий long.md/short.md, без перегенерации.',
+          'Batch («сделай все проекты») — за окно по умолчанию 6 часов + таблица проектов/рисков.',
+          '',
+          'Правила генерации версионируются в репозитории и собираются при деплое (CI/CD), поэтому изменения видны как diff.',
+          lc ? `Последнее изменение правил: ${lc.sha} (${lc.date}) — ${lc.subject}` : 'Последнее изменение правил: нет данных (не git-чек).',
+          '',
+          'Детали: https://github.com/trained-assist/trained-assist-freelance-skill',
+        ].join('\n');
+        return { explanation: text, last_change: lc, text };
       },
     },
 

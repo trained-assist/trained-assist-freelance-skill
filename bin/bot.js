@@ -50,6 +50,8 @@ const COMMANDS = [
   { command: 'classify', description: 'Классифицировать текст: /classify <текст>' },
   { command: 'folder', description: 'Папка Drive для таблиц: /folder <id>' },
   { command: 'spec', description: 'Исходники для ТЗ: /spec <slug>' },
+  { command: 'spec_generation_defaults', description: 'Текущие настройки генерации ТЗ' },
+  { command: 'spec_generation_explained', description: 'Как работает генерация ТЗ' },
 ];
 
 const STAGES = ['fact', 'requirement', 'interpretation', 'solution', 'qna'];
@@ -146,11 +148,15 @@ async function handleCommand(chatId, profile, text) {
     folder: { tool: 'freelance_set_folder', args: { folder_id: rest.split(/\s+/)[0] } },
     classify: { tool: 'freelance_classify_document', args: { text: rest } },
     spec: { tool: 'freelance_generate_spec', args: { project_id: rest.split(/\s+/)[0] } },
+    spec_generation_defaults: { tool: 'freelance_spec_generation_defaults', args: {} },
+    spec_generation_explained: { tool: 'freelance_spec_generation_explained', args: {} },
   };
+  // Commands that take no project_id (or a different required arg).
+  const NO_PROJECT_ID = new Set(['projects', 'classify', 'folder', 'spec_generation_defaults', 'spec_generation_explained']);
 
   if (toolOf[cmd]) {
     const { tool, args } = toolOf[cmd];
-    if (cmd !== 'projects' && cmd !== 'classify' && !args.project_id && cmd !== 'folder') {
+    if (!NO_PROJECT_ID.has(cmd) && !args.project_id) {
       await tg('sendMessage', { chat_id: chatId, text: USAGE[cmd] });
       return true;
     }
@@ -160,7 +166,7 @@ async function handleCommand(chatId, profile, text) {
     }
     try {
       const result = await runMcpTool(profile, tool, args);
-      await sendLong(chatId, result);
+      await sendLong(chatId, extractText(result));
     } catch (e) {
       await sendLong(chatId, `❌ ${e.message}`);
     }
@@ -314,6 +320,13 @@ function stripAnsi(s) {
     out.push(line);
   }
   return out.join('\n').trim();
+}
+
+// Some MCP tools return a ready-to-read `text` field (e.g. the spec-generation
+// info commands) — show that text instead of raw JSON.
+function extractText(raw) {
+  try { const o = JSON.parse(raw); if (o && typeof o.text === 'string') return o.text; } catch { /* not json */ }
+  return raw;
 }
 
 // Telegram messages cap at 4096 chars — split on paragraph boundaries.

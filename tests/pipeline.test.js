@@ -198,6 +198,22 @@ test('freelance_get_spec returns current docs (read-compatible with legacy tz.md
   assert.match(lr.docs.long, /# Legacy TZ/);
 });
 
+test('spec-generation info tools describe current settings, notes and the repo link', async () => {
+  const registry = freshEnv();
+  const { project_id } = await registry.callTool('freelance_new_project', { name: 'Info', description: 'x' });
+  await registry.callTool('freelance_generation_note', { project_id, text: 'всегда техничнее' });
+
+  const d = await registry.callTool('freelance_spec_generation_defaults', { project_id });
+  assert.match(d.text, /Настройки генерации/);
+  assert.match(d.text, /markdown/);
+  assert.match(d.text, /всегда техничнее/);
+  assert.ok('last_change' in d);
+
+  const e = await registry.callTool('freelance_spec_generation_explained', {});
+  assert.match(e.text, /НЕЗАВИСИМО/);
+  assert.match(e.text, /github\.com\/trained-assist\/trained-assist-freelance-skill/);
+});
+
 test('a broken/truncated LLM response never gets silently treated as "definitely new" — regression for the duplicate-lead bug found in real testing', async () => {
   const registry = freshEnv();
   process.env.OPENROUTER_API_KEY = 'fake-key-for-this-test';

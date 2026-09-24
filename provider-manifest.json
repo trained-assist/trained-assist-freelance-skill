@@ -172,6 +172,25 @@
       "retrySafety": "read_only"
     },
     {
+      "name": "freelance_spec_generation_defaults",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "project_id": { "type": "string" } }
+      },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
+      "name": "freelance_spec_generation_explained",
+      "inputSchema": { "type": "object", "properties": {} },
+      "allowedTriggers": ["user"],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
+    },
+    {
       "name": "freelance_set_folder",
       "inputSchema": {
         "type": "object",
