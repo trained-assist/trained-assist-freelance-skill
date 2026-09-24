@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "_comment": "Domain-owned Telegram command surface for the freelance skill. Single source of truth for the standalone bot; the shared agent/gateway should consume this declaration for the freelance audience instead of hardcoding freelance commands (avoids abstraction leakage into the generic bot). handler: 'local' = handled by the bot itself; 'tool' = maps to an MCP tool. argMode: 'first' = first whitespace token; 'rest' = the whole remainder.",
+  "commands": [
+    { "command": "start", "description": "Приветствие и список команд", "handler": "local" },
+    { "command": "help", "description": "Список команд и примеры", "handler": "local" },
+
+    { "command": "projects", "description": "Список всех проектов", "handler": "tool", "tool": "freelance_list", "arg": null },
+    { "command": "project", "description": "Контекст проекта: /project <slug>", "handler": "tool", "tool": "freelance_get_project", "arg": "project_id", "argMode": "first", "usage": "Использование: /project <slug>. Список проектов: /projects" },
+    { "command": "new", "description": "Новый проект: /new Название: описание", "handler": "local", "usage": "Использование: /new Название проекта: описание задачи" },
+    { "command": "add", "description": "Добавить в проект: /add <slug> <стадия> <текст>", "handler": "local", "usage": "Использование: /add <slug> <стадия> <текст>" },
+    { "command": "risk", "description": "Риск-оценка: /risk <slug>", "handler": "tool", "tool": "freelance_assess", "arg": "project_id", "argMode": "first", "usage": "Использование: /risk <slug>" },
+    { "command": "questions", "description": "Открытые вопросы: /questions <slug>", "handler": "tool", "tool": "freelance_questions", "arg": "project_id", "argMode": "first", "usage": "Использование: /questions <slug>" },
+    { "command": "classify", "description": "Классифицировать текст: /classify <текст>", "handler": "tool", "tool": "freelance_classify_document", "arg": "text", "argMode": "rest", "usage": "Использование: /classify <текст документа/сообщения>" },
+    { "command": "folder", "description": "Папка Drive для таблиц: /folder <id>", "handler": "tool", "tool": "freelance_set_folder", "arg": "folder_id", "argMode": "first", "usage": "Использование: /folder <folder_id из Google Drive>" },
+    { "command": "spec", "description": "Исходники для ТЗ: /spec <slug>", "handler": "tool", "tool": "freelance_generate_spec", "arg": "project_id", "argMode": "first", "usage": "Использование: /spec <slug>" },
+
+    { "command": "spec_generation_defaults", "description": "Текущие настройки генерации ТЗ", "handler": "tool", "tool": "freelance_spec_generation_defaults", "arg": null },
+    { "command": "spec_generation_explained", "description": "Как работает генерация ТЗ", "handler": "tool", "tool": "freelance_spec_generation_explained", "arg": null },
+
+    { "command": "remember", "description": "Запомнить правило генерации (профиль / проект)", "handler": "local", "usage": "Использование: /remember <текст> — для профиля; /remember <slug> <текст> — для проекта" }
+  ]
+}

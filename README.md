@@ -22,14 +22,36 @@ same profile.
 
 ## Pipeline
 
+Sources (dialogue/files/screenshots) are **traceability, not spec text** — they
+never leak into the final document automatically:
+
 ```
-RAW INPUT ──▶ provenance/log.jsonl (+ raw/ copy)
+RAW INPUT ──▶ provenance/log.jsonl (+ raw/ copy)        [sources / traceability only]
            ──▶ facts.md          (extracted, deduped, cites a provenance id)
-           ──▶ requirements.md   (client asks/constraints/open questions — no engineering)
-           ──▶ interpretation.md (our assumptions, flagged, pending confirmation)
-           ──▶ solution.md       (our engineering answer, cites requirement ids)
-           ──▶ spec/tz.md        (generated from requirements.md + solution.md only)
+           ──▶ requirements.md   (atomic requirements about the system: «Система должна …», no «клиент сказал»)
+           ──▶ interpretation.md (our assumptions, flagged)
+           ──▶ solution.md       (our engineering answer)
+           ──▶ spec/_source.md   (normalized context — the single input to both variants)
+                ├──▶ spec/long.md   (detailed spec for the implementer)
+                └──▶ spec/short.md  (independent executive spec for the client)
 ```
+
+`long.md` and `short.md` are generated **independently** from the same normalized
+context — `short` is *not* a summary of `long` (versions may differ in framing and
+emphasis, so the freelancer can pick the better one to send). Both describe the
+**system**, never the conversation: no «клиент сказал», no chronology, no
+provenance references, no meta-sections («допущения и почему они здесь»).
+Open/unconfirmed items go to a short «Открытые вопросы» section, not into the
+requirements prose.
+
+- **Persistent generation rules** — `_generation.md` (profile) and
+  `<project>/generation.md` (project, wins), written via `freelance_generation_note`.
+  Applied to every subsequent generation.
+- **Ad-hoc edits** — a one-off request («убери раздел X», «сократи», «измени только
+  Short») edits the existing `long.md`/`short.md` in place via `freelance_get_spec`;
+  the user's instruction outranks the template (a removed section is not restored).
+- **Batch** — `freelance_generate_all` collects projects over a window (default 6h),
+  returns a projects/risks table to show first, then generates per project.
 
 `freelance_add_info`'s `stage` argument is what enforces this — each call writes
 to exactly one file, so "client said X" can't casually leak into the solution,
@@ -54,11 +76,13 @@ don't apply there.
 ```
 $USERS_DIR/<profile>/Фриланс проекты/
   _index.json                 # all projects: id, name, status, type, timestamps
+  _generation.md              # profile-level persistent generation rules
   _classifier/
     recent-context.json       # sequence signal for freelance_classify_document
     drive-folder.json         # optional shared Google Drive folder for Sheets exports
   <project-slug>/
     project.json
+    generation.md             # project-level persistent generation rules (wins over profile)
     provenance/
       log.jsonl               # every intake event: source, reliability, contradicts
       raw/                    # small raw files kept verbatim
@@ -66,19 +90,25 @@ $USERS_DIR/<profile>/Фриланс проекты/
     requirements.md
     interpretation.md
     solution.md
-    qna.md
+    qna.md                    # conversation log — traceability, NOT fed into spec generation
     risk-assessment.json      # GO/NO-GO signals/score/verdict
     spec/
-      tz.md
+      _source.md              # normalized context both variants are generated from
+      long.md                 # detailed spec (implementer)
+      short.md                # independent executive spec (client)
+      tz.md                   # legacy single-document pipeline — read-compat only
       exports/
 ```
 
 ## MCP tools (`src/mcp-skills/tools/`)
 
 - `10-freelance-project.js` — `freelance_new_project`, `freelance_add_info`,
-  `freelance_assess`, `freelance_questions`, `freelance_list`,
+  `freelance_assess`, `freelance_questions`, `freelance_list` (with `since` window),
   `freelance_get_project` (full-context dump for resuming in a new session),
-  `freelance_generate_spec`, `freelance_set_folder`.
+  `freelance_generate_spec` (normalized context + `variants: long|short|both`),
+  `freelance_get_spec` (read current long/short for in-place editing),
+  `freelance_generation_note` (persistent profile/project generation rules),
+  `freelance_generate_all` (batch over a time window), `freelance_set_folder`.
 - `20-freelance-classifier.js` — `freelance_classify_document`: cheap-LLM-only
   (OpenRouter, never spawns a Claude Code session) routing of a new incoming
   document to an existing project or "new project". Content dominates over
