@@ -65,7 +65,26 @@ function parseLlmJson(content) {
   content = content.trim();
   const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) content = fence[1].trim();
-  return JSON.parse(content);
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    // Small/fast models sometimes truncate mid-string when max_tokens is hit,
+    // or emit an unescaped control char inside a string — found for real
+    // testing the duplicate-lead scenario ("Unterminated string in JSON").
+    // Recover the last *complete* top-level object by bracket-matching instead
+    // of failing outright, since a failed classification here used to silently
+    // default to "definitely a new project" — the one thing this tool must
+    // never guess.
+    let depth = 0, end = -1;
+    for (let i = 0; i < content.length; i++) {
+      if (content[i] === '{') depth++;
+      else if (content[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end > 0) {
+      try { return JSON.parse(content.slice(0, end + 1)); } catch { /* fall through */ }
+    }
+    throw e;
+  }
 }
 
 function readIndex() {
@@ -150,10 +169,15 @@ module.exports = {
           ].join('\n');
 
           try {
-            const raw = await llmCall(apiKey, FAST_MODEL, [{ role: 'user', content: prompt }]);
+            const raw = await llmCall(apiKey, FAST_MODEL, [{ role: 'user', content: prompt }], 1500);
             result = parseLlmJson(raw);
           } catch (e) {
-            result = { ranked: [], likely_new: true, _llm_error: e.message };
+            // Never silently default to "definitely new" on a broken LLM call —
+            // that's exactly the false negative found testing the duplicate-lead
+            // scenario. An unreadable classification means "we don't know",
+            // not "it's new": surface the active project list so the caller can
+            // judge or ask the user, instead of asserting either way.
+            result = { ranked: [], likely_new: false, _llm_error: e.message };
           }
         } else {
           result = { ranked: [], likely_new: true, _no_api_key: true };
@@ -180,13 +204,21 @@ module.exports = {
           };
         }
 
+        const classificationFailed = !!(result._no_api_key || result._llm_error);
         return {
-          new_project: !!result.likely_new && ranked.length === 0,
+          new_project: !classificationFailed && !!result.likely_new && ranked.length === 0,
           auto_filed: false,
           candidates: ranked.slice(0, 3).map(r => ({ project_id: r.project_id, confidence: r.confidence, why: r.why })),
-          message: ranked.length
-            ? `Недостаточная уверенность для авто-классификации (топ ${top?.confidence ?? '?'}, отрыв ${margin.toFixed(2)}). Спроси пользователя, к какому проекту это относится, или создавай новый.`
-            : 'Похоже на новый проект — совпадений с существующими не найдено.',
+          // Included whenever classification didn't cleanly resolve, so the caller
+          // can eyeball for an obvious match instead of trusting a guess either way.
+          active_projects: classificationFailed || ranked.length === 0
+            ? projects.map(p => ({ project_id: p.slug, name: p.name }))
+            : undefined,
+          message: classificationFailed
+            ? 'Классификация не удалась технически — НЕ считай это подтверждением, что проект новый. Посмотри active_projects вручную или спроси пользователя.'
+            : ranked.length
+              ? `Недостаточная уверенность для авто-классификации (топ ${top?.confidence ?? '?'}, отрыв ${margin.toFixed(2)}). Спроси пользователя, к какому проекту это относится, или создавай новый.`
+              : 'Похоже на новый проект — совпадений с существующими не найдено.',
           _note: result._no_api_key ? 'OPENROUTER_API_KEY не настроен — классификация недоступна, спроси пользователя явно.' : (result._llm_error ? `LLM error: ${result._llm_error}` : undefined),
         };
       },

@@ -90,3 +90,19 @@ test('freelance_classify_document never auto-files without an OpenRouter key con
   const r = await registry.callTool('freelance_classify_document', { text: 'unrelated new document', filename: 'y.pdf' });
   assert.equal(r.auto_filed, false);
 });
+
+test('a broken/truncated LLM response never gets silently treated as "definitely new" — regression for the duplicate-lead bug found in real testing', async () => {
+  const registry = freshEnv();
+  process.env.OPENROUTER_API_KEY = 'fake-key-for-this-test';
+  await registry.callTool('freelance_new_project', { name: 'ЖБИ-заводы', type: 'ecommerce', description: 'x' });
+
+  // No network mocking available here — with a fake key the real openrouter.ai
+  // call will fail (auth error), exercising the exact "classification failed"
+  // path the bug was in, without needing a live/successful LLM round trip.
+  const r = await registry.callTool('freelance_classify_document', {
+    text: 'Сбор данных о заводах-производителях РФ, карточки + прайслисты — duplicate lead',
+  });
+  assert.equal(r.new_project, false, 'a failed classification must never assert new_project:true');
+  assert.equal(r.auto_filed, false);
+  assert.ok(Array.isArray(r.active_projects) && r.active_projects.length === 1, 'must surface the active project list so the caller can judge manually');
+});
