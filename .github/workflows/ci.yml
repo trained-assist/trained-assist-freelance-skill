@@ -1,0 +1,43 @@
+name: CI
+
+# This repo had no GitHub Actions at all — every test run was manual. This adds the
+# offline half automatically and keeps the live e2e opt-in.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: check + unit tests (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # No dependencies in package.json (Node built-ins only) — no npm install needed.
+      - name: Require/load every MCP tool
+        run: npm run check
+      - name: Unit tests (offline)
+        run: npm test
+
+  # End-to-end spec generation: needs a real `opencode` binary + network + an
+  # OpenRouter key for the LLM judge, so it is deliberately NOT on every push.
+  # Requires a self-hosted runner labelled `opencode`. Manual dispatch only.
+  e2e:
+    name: spec-generation e2e (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, opencode]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Spec-generation e2e (real engine + judge)
+        run: npm run test:e2e
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          E2E_MODEL: ${{ vars.E2E_MODEL }}
