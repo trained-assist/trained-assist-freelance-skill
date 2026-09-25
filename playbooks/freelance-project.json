@@ -1,0 +1,136 @@
+{
+  "id": "freelance-project",
+  "version": 1,
+  "scope": "system",
+  "title": "Freelance project spec",
+  "goal_template": "{goal}",
+  "user_value_template": "Спецификация фриланс-проекта (long + short) и явный вердикт GO/NO-GO с обоснованием и рисками.",
+  "defaults": {
+    "max_attempts": 3,
+    "execution_timeout_seconds": 600,
+    "recovery_policy": "default"
+  },
+  "stages": [
+    {
+      "id": "intake",
+      "title": "Intake — сырой ввод как источник",
+      "steps": [
+        {
+          "title": "Create project and record raw input as provenance",
+          "execution_kind": "agent",
+          "executor_role": "researcher",
+          "minimum_model_level": "bachelor",
+          "context_budget": "small",
+          "instructions": "Вызови freelance_new_project (или найди существующий проект) и запиши сырой ввод клиента как источник: provenance/log.jsonl (+ raw/ при необходимости). Сырой текст — это traceability, НЕ текст спеки.",
+          "validation": { "project_created": true, "raw_input_in_provenance_only": true }
+        }
+      ]
+    },
+    {
+      "id": "extract",
+      "title": "Факты, требования, допущения, решение",
+      "steps": [
+        {
+          "title": "Extract facts",
+          "execution_kind": "agent",
+          "executor_role": "researcher",
+          "minimum_model_level": "master",
+          "context_budget": "medium",
+          "instructions": "freelance_add_info stage=facts: извлечённые, дедуплицированные факты, каждый со ссылкой на provenance id. Без «клиент сказал».",
+          "validation": { "facts_written": true, "each_fact_cites_provenance": true }
+        },
+        {
+          "title": "Write atomic requirements",
+          "execution_kind": "agent",
+          "executor_role": "researcher",
+          "minimum_model_level": "master",
+          "context_budget": "medium",
+          "instructions": "freelance_add_info stage=requirements: атомарные требования о СИСТЕМЕ («Система должна …»). Никаких отсылок к диалогу/провенансу. Если клиент диктует стек — это требование, не наше решение.",
+          "validation": { "requirements_written": true, "no_conversation_leak": true }
+        },
+        {
+          "title": "Record assumptions",
+          "execution_kind": "agent",
+          "executor_role": "researcher",
+          "minimum_model_level": "master",
+          "context_budget": "medium",
+          "instructions": "freelance_add_info stage=interpretation: наши допущения, явно помеченные как допущения. Не смешивать с требованиями.",
+          "validation": { "assumptions_flagged": true }
+        },
+        {
+          "title": "Propose solution",
+          "execution_kind": "agent",
+          "executor_role": "developer",
+          "minimum_model_level": "master",
+          "context_budget": "medium",
+          "instructions": "freelance_add_info stage=solution: наше инженерное решение. Вправе согласиться с клиентским стеком или предложить иначе.",
+          "validation": { "solution_written": true, "requirements_covered_or_deferred": true }
+        }
+      ]
+    },
+    {
+      "id": "clarify",
+      "title": "Уточняющие вопросы",
+      "steps": [
+        {
+          "title": "Ask clarifying questions",
+          "execution_kind": "agent",
+          "executor_role": "researcher",
+          "minimum_model_level": "bachelor",
+          "context_budget": "small",
+          "instructions": "freelance_questions: сформулируй только неясные вопросы по типу проекта. Ответы заводятся как intake (freelance_add_info), не дописываются задним числом. qna.md — traceability, в генерацию не идёт.",
+          "validation": { "questions_asked": true, "answers_recorded_as_intake": true }
+        }
+      ]
+    },
+    {
+      "id": "assess",
+      "title": "GO/NO-GO вердикт",
+      "steps": [
+        {
+          "title": "Run deterministic risk assessment",
+          "execution_kind": "programmatic",
+          "instructions": "freelance_assess: детерминированный lib/risk-engine.js по сигналам проекта → risk-assessment.json (signals, score, verdict). Для academic бизнес-сигналы не применяются.",
+          "validation": { "risk_assessment_written": true, "verdict_deterministic": true }
+        },
+        {
+          "title": "Explain verdict with risks",
+          "execution_kind": "agent",
+          "executor_role": "reviewer",
+          "minimum_model_level": "doctor",
+          "context_budget": "medium",
+          "instructions": "По risk-assessment.json дай человекочитаемое обоснование вердикта GO/NO-GO и явный список рисков. Не переопределяй вердикт движка — объясняй его.",
+          "validation": { "verdict_explained": true, "risks_listed": true, "verdict_not_overridden": true }
+        }
+      ]
+    },
+    {
+      "id": "spec",
+      "title": "Генерация спецификации",
+      "steps": [
+        {
+          "title": "Generate long and short specs",
+          "execution_kind": "agent",
+          "executor_role": "developer",
+          "minimum_model_level": "master",
+          "context_budget": "large",
+          "instructions": "freelance_generate_spec variants=both: spec/_source.md — единственный вход; long.md и short.md генерируются НЕЗАВИСИМО (short — не сокращение long). Правила _generation.md (профиль) и <project>/generation.md (проект, приоритетнее). Без «клиент сказал», хронологии и meta-разделов о допущениях.",
+          "validation": { "long_generated": true, "short_generated_independently": true, "no_conversation_leak": true }
+        },
+        {
+          "title": "Verify spec against requirements",
+          "execution_kind": "agent",
+          "executor_role": "reviewer",
+          "minimum_model_level": "doctor",
+          "context_budget": "medium",
+          "instructions": "Проверь, что каждое существенное требование покрыто спекой или явно отложено; открытые пункты — в разделе «Открытые вопросы», не в прозе требований.",
+          "validation": { "spec_covers_requirements": true, "open_questions_section_present": true }
+        }
+      ]
+    }
+  ],
+  "hooks": {
+    "task_done": [{ "type": "notify", "to": "owner", "text": "Спецификация готова: {goal}" }],
+    "task_failed": [{ "type": "notify", "to": "owner", "text": "Проект застрял: {goal} — {error}" }]
+  }
+}
