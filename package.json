@@ -4,8 +4,19 @@
   "description": "Freelance project intake & analysis skill — provenance/facts/requirements/solution pipeline, multi-project store, GO/NO-GO risk scoring, incoming-document classifier. Domain skill server, sibling to trained-assist-agent.",
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "test:unit": "node --test tests/*.test.js",
+    "test:contract": "node --test tests/contract/*.test.cjs",
+    "test:behavior": "node --test tests/behavior/*.test.cjs",
+    "test:guards": "node scripts/guards.cjs",
+    "test:replay": "node scripts/staging/run.mjs",
+    "test:staging": "node scripts/staging/run.mjs",
     "test:e2e": "node e2e/spec-generation.e2e.mjs",
+    "build:manifest": "node scripts/build-mcp-manifest.cjs",
+    "sync:manifest": "node scripts/sync-provider-manifest.cjs",
     "check": "node -e \"require('fs').readdirSync('src/mcp-skills/tools').forEach(f => require('./src/mcp-skills/tools/'+f))\""
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "vitest": "^2.1.9"
+  }
 }

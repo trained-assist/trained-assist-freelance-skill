@@ -1,0 +1,504 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "freelance",
+      "providerId": "freelance",
+      "mcpServerId": "freelance-skills",
+      "repository": "trained-assist/trained-assist-freelance-skill",
+      "revision": "da5f65fe829887ee4d33429dec1881427d9c8a18",
+      "manifestVersion": 2,
+      "artifactDir": "src",
+      "entrypoint": "src/mcp-skills/index.js",
+      "manifest": "provider-manifest.json",
+      "artifactDigest": "bccc6b96ba5436490e77e22efddb3797fbb9a791f962a5d1d398f6cfbdf7c8a6",
+      "approvedManifest": {
+        "version": 2,
+        "providerId": "freelance",
+        "actions": [
+          {
+            "name": "freelance_new_project",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "name",
+                "description"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Название проекта (как удобно человеку, не обязательно slug-safe)"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Всё что известно на этом этапе — попадёт в facts.md как первая запись"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "ai_simple",
+                    "integration",
+                    "ecommerce",
+                    "medtech",
+                    "academic",
+                    "default"
+                  ],
+                  "description": "Тип проекта — влияет на риск-модель и шаблон плана"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Провенанс исходного описания: chat/file/voice/screenshot/forwarded"
+                },
+                "reliability": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "description": "Насколько надёжен источник (по умолчанию medium)"
+                },
+                "force_new": {
+                  "type": "boolean",
+                  "description": "Создать новый, даже если проект с таким именем уже существует"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "write",
+            "requiresApproval": false,
+            "retrySafety": "idempotent"
+          },
+          {
+            "name": "freelance_add_info",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "project_id",
+                "stage",
+                "content"
+              ],
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "fact",
+                    "requirement",
+                    "interpretation",
+                    "solution",
+                    "qna"
+                  ]
+                },
+                "content": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Только для stage=fact: chat/file/voice/screenshot/forwarded"
+                },
+                "reliability": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ]
+                },
+                "contradicts": {
+                  "type": "string",
+                  "description": "ID предыдущего provenance-факта, которому это противоречит (не перезаписывать молча — фиксировать конфликт)"
+                },
+                "hasTZ": {
+                  "type": "boolean"
+                },
+                "valueClear": {
+                  "type": "boolean"
+                },
+                "clientSeesResult": {
+                  "type": "boolean"
+                },
+                "clientAnsweredQuestions": {
+                  "type": "boolean"
+                },
+                "hasValueWording": {
+                  "type": "boolean"
+                },
+                "prepaymentReady": {
+                  "type": "boolean"
+                },
+                "hasClearDeadline": {
+                  "type": "boolean"
+                },
+                "budgetConfirmed": {
+                  "type": "boolean"
+                },
+                "scopeUnambiguous": {
+                  "type": "boolean"
+                },
+                "deliveryAgreed": {
+                  "type": "boolean"
+                },
+                "priceAgreed": {
+                  "type": "boolean"
+                },
+                "integrationCount": {
+                  "type": "number"
+                },
+                "hasMVP": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "write",
+            "requiresApproval": false,
+            "retrySafety": "unsafe"
+          },
+          {
+            "name": "freelance_assess",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "project_id"
+              ],
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                },
+                "folder_id": {
+                  "type": "string"
+                },
+                "spreadsheet_id": {
+                  "type": "string"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "write",
+            "requiresApproval": false,
+            "retrySafety": "idempotent"
+          },
+          {
+            "name": "freelance_questions",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "project_id"
+              ],
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_list",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "won",
+                    "lost",
+                    "archived"
+                  ]
+                },
+                "since": {
+                  "type": "string",
+                  "description": "Окно по updatedAt: 6h | 2h | today | YYYY-MM-DD..YYYY-MM-DD"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_get_project",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "project_id"
+              ],
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_generate_spec",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "project_id"
+              ],
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                },
+                "variants": {
+                  "type": "string",
+                  "enum": [
+                    "both",
+                    "long",
+                    "short"
+                  ],
+                  "description": "Какие версии генерировать (по умолчанию both)"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_get_spec",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "project_id"
+              ],
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string",
+                  "enum": [
+                    "both",
+                    "long",
+                    "short"
+                  ],
+                  "description": "Что вернуть (по умолчанию both)"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_generation_note",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "Инструкция пользователя"
+                },
+                "project_id": {
+                  "type": "string",
+                  "description": "Если задан — инструкция только для проекта"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "append",
+                    "replace"
+                  ],
+                  "description": "append (по умолчанию) добавляет пункт; replace перезаписывает"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "write",
+            "requiresApproval": false,
+            "retrySafety": "unsafe"
+          },
+          {
+            "name": "freelance_generate_all",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "since": {
+                  "type": "string",
+                  "description": "6h (по умолчанию) | 2h | today | YYYY-MM-DD..YYYY-MM-DD"
+                },
+                "variants": {
+                  "type": "string",
+                  "enum": [
+                    "both",
+                    "long",
+                    "short"
+                  ]
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_spec_generation_defaults",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "project_id": {
+                  "type": "string"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_spec_generation_explained",
+            "inputSchema": {
+              "type": "object",
+              "properties": {}
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
+          },
+          {
+            "name": "freelance_set_folder",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "folder_id"
+              ],
+              "properties": {
+                "folder_id": {
+                  "type": "string"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "write",
+            "requiresApproval": false,
+            "retrySafety": "idempotent"
+          },
+          {
+            "name": "freelance_classify_document",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "Текст документа/сообщения (или содержимое файла)"
+                },
+                "filename": {
+                  "type": "string",
+                  "description": "Имя файла, если есть — слабый сигнал, не решающий"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "write",
+            "requiresApproval": false,
+            "retrySafety": "unsafe"
+          }
+        ],
+        "contextFields": [
+          {
+            "key": "freelance_project_count",
+            "label": "Число фриланс-проектов профиля",
+            "type": "number",
+            "source": "capability"
+          },
+          {
+            "key": "recent_project",
+            "label": "Последний обновлённый фриланс-проект",
+            "type": "string",
+            "source": "capability"
+          },
+          {
+            "key": "google_drive_folder",
+            "label": "Папка Google Drive для таблиц фриланс-проектов",
+            "type": "string",
+            "source": "context_store"
+          },
+          {
+            "key": "drive_connection_status",
+            "label": "Статус подключения Google Drive",
+            "type": "string",
+            "source": "capability"
+          },
+          {
+            "key": "classifier_ready",
+            "label": "Классификатор документов доступен (есть OpenRouter ключ)",
+            "type": "boolean",
+            "source": "capability"
+          }
+        ],
+        "connections": [
+          {
+            "id": "gdrive",
+            "label": "Google Drive (таблицы рисков)",
+            "requiredFor": [
+              "freelance_assess",
+              "freelance_new_project"
+            ]
+          },
+          {
+            "id": "openrouter",
+            "label": "OpenRouter (классификатор документов)",
+            "requiredFor": [
+              "freelance_classify_document"
+            ]
+          }
+        ]
+      },
+      "enabled": true,
+      "profiles": []
+    }
+  ]
+}

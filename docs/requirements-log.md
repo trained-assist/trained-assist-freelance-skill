@@ -38,6 +38,19 @@
 - [ ] `планируется` тихий набор входного (всегда копим; ACK по all_on; TTL 6ч) — tg-bot #251
 - [ ] `планируется` E2E: main bot regression + restart через freelance bot; вынос общего runner'а (сейчас харнесс дублирует workspace/opencode из `bin/bot.js`)
 
+## 2026-09-26 — domain-skill test & CI rules (issue #21)
+
+- [x] `реализовано` L1 contract: `mcp.manifest.json` против `contracts/mcp-skill-sources.schema.json`; `artifactDigest` пересчитывается (`scripts/build-mcp-manifest.cjs`); паритет имён с реальным `tools/list`; реальный core `ActionProviderRegistry` принимает `provider-manifest.json`; проверка shadowing core-серверов
+- [x] `реализовано` L2 behavior: реальный MCP-сервер по stdio (`tests/helpers/mcp-client.cjs`); фикстура на каждый тул (`fixtures/tool-contract.json`); ошибки — in-band `isError`, не краш (`src/mcp-skills/index.js`)
+- [x] `реализовано` L3 guards (`scripts/guards.cjs`): quick-action не спавнят Claude/opencode; таймаут у каждого внешнего вызова; секреты не логируются; пути через резолвер
+- [x] `реализовано` replay-гейт: вендорены `scripts/staging/run.mjs` + `isolation-guard.cjs` + `suites.json`; mandatory-сценарии в `tests/replay/`
+- [x] `реализовано` сценарии + план моков: `docs/user-scenarios/freelance/`, `scenarios/freelance-intake/`, `scenarios/freelance-classifier-routing/`
+- [x] `реализовано` моки ровно 2 рубежа: LLM (loopback-фикстуры `fixtures/llm/`, `OPENROUTER_BASE_URL`) и внешняя сеть (guard). risk-engine и registry — реальные, не мокаются
+- [x] `реализовано` CI: `ci` (unit+contract+behavior+guards) и `staging-gate` (replay); LLM-судья вынесен в отдельный manual `staging-judge.yml`
+- [x] `реализовано` закрыт реальный L3-разрыв: у классификатора не было таймаута на `https.request` → переведён на `fetch` + `AbortSignal.timeout` + инъектируемый base URL
+- [ ] `планируется` Phase 2 харнесса: извлечь в общий пакет `@trained-assist/mcp-skill-testkit`
+- [ ] `планируется` staging-канарейка: примонтировать источник к sandbox-профилю на смёрженном SHA и проверить live
+
 ## Отложено
 
 - [ ] `планируется` batch-leads smoke (projects_daily_2026-09-21_no_links.xlsx, ~600 строк)
