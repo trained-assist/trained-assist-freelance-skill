@@ -4,7 +4,7 @@ Goal: this domain MCP skill server satisfies `docs/domain-skill-repo-test-rules.
 — three hermetic CI layers + a deterministic replay gate, mocks limited to the LLM
 and external network, `risk-engine` and the registry left real.
 
-- [ ] CI green on https://github.com/trained-assist/trained-assist-freelance-skill/pull/22
+- [x] CI green on https://github.com/trained-assist/trained-assist-freelance-skill/pull/22 (unit, contract, behavior, guards, staging-gate all pass)
 - [ ] Merged to main
 - [ ] Deployed / mounted to staging — verified live (real control plane to a sandbox profile)
 
