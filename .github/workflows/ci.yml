@@ -1,43 +1,112 @@
 name: CI
 
-# This repo had no GitHub Actions at all — every test run was manual. This adds the
-# offline half automatically and keeps the live e2e opt-in.
+# Three hermetic layers (contract / behavior / guards) + a deterministic replay
+# gate, per docs/domain-skill-repo-test-rules.md. The LLM judge is NOT here —
+# see staging-judge.yml (non-deterministic, staging-only).
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: freelance-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: check + unit tests (offline)
+  unit:
+    name: unit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      # No dependencies in package.json (Node built-ins only) — no npm install needed.
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev
       - name: Require/load every MCP tool
         run: npm run check
       - name: Unit tests (offline)
-        run: npm test
+        run: npm run test:unit
 
-  # End-to-end spec generation: needs a real `opencode` binary + network + an
-  # OpenRouter key for the LLM judge, so it is deliberately NOT on every push.
-  # Requires a self-hosted runner labelled `opencode`. Manual dispatch only.
-  e2e:
-    name: spec-generation e2e (manual)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, opencode]
-    continue-on-error: true
+  contract:
+    name: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Spec-generation e2e (real engine + judge)
-        run: npm run test:e2e
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev
+      - name: L1 — manifest, digest, parity, core consumer
+        run: npm run test:contract
+
+  behavior:
+    name: behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev
+      - name: L2 — real MCP subprocess + fixtures
+        run: npm run test:behavior
+
+  guards:
+    name: guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev
+      - name: L3 — static gates
+        run: npm run test:guards
+
+  ci:
+    name: ci
+    needs: [unit, contract, behavior, guards]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every hermetic layer to have succeeded
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          E2E_MODEL: ${{ vars.E2E_MODEL }}
+          UNIT: ${{ needs.unit.result }}
+          CONTRACT: ${{ needs.contract.result }}
+          BEHAVIOR: ${{ needs.behavior.result }}
+          GUARDS: ${{ needs.guards.result }}
+        run: test "$UNIT" = success && test "$CONTRACT" = success && test "$BEHAVIOR" = success && test "$GUARDS" = success
+
+  staging-gate:
+    name: staging-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev
+      - name: Deterministic replay gate (isolated roots, loopback-only)
+        run: npm run test:replay
+      - name: Upload run manifest (audit: what exactly ran)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-results/
+          retention-days: 7

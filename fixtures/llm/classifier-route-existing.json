@@ -1,0 +1,6 @@
+{
+  "ranked": [
+    { "project_id": "$project_id", "confidence": 0.95, "why": "содержание совпадает: фото товара и описание" }
+  ],
+  "likely_new": false
+}

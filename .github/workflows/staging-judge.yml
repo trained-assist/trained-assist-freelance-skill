@@ -1,0 +1,32 @@
+name: Staging LLM judge
+
+# Post-merge / manual only. Runs a LIVE engine + a cheap LLM judge against a real
+# OpenRouter key — deliberately NOT on pull_request, because an LLM judge in CI is
+# a non-deterministic, flaky gate (docs/domain-skill-repo-test-rules.md §4).
+# Requires a self-hosted runner labelled `opencode`.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  judge:
+    name: spec-generation LLM judge
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, opencode]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Spec-generation e2e + LLM judge
+        run: npm run test:e2e
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          E2E_MODEL: ${{ vars.E2E_MODEL }}

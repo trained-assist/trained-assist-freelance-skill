@@ -47,9 +47,15 @@ rl.on('line', async (line) => {
 
     } else if (method === 'tools/call') {
       const { name, arguments: args } = params || {};
-      const result = await registry.callTool(name, args || {});
-      const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-      respond(id, { content: [{ type: 'text', text }] });
+      try {
+        const result = await registry.callTool(name, args || {});
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        respond(id, { content: [{ type: 'text', text }] });
+      } catch (e) {
+        // Tool execution errors are reported in-band (`isError`), not as a
+        // JSON-RPC fault and never as a process crash — the MCP tools contract.
+        respond(id, { content: [{ type: 'text', text: e.message }], isError: true });
+      }
 
     } else {
       respondError(id, -32601, `Method not found: ${method}`);

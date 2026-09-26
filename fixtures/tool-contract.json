@@ -1,0 +1,75 @@
+{
+  "_comment": "L2 tool fixtures — one entry per MCP tool. `$project_id` is resolved by the behavior suite after freelance_new_project creates the fixture project. expectedEnvelope is the JSON-RPC tools/call result shape the executable must return (never a crash).",
+  "tools": [
+    {
+      "name": "freelance_new_project",
+      "validArgs": { "name": "Behavior fixture project", "description": "Клиент хочет систему приёма фото товара и выдачи описания", "type": "ecommerce" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_add_info",
+      "validArgs": { "project_id": "$project_id", "stage": "requirement", "content": "Система должна принимать фото товара и возвращать описание" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_assess",
+      "validArgs": { "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_questions",
+      "validArgs": { "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_list",
+      "validArgs": {},
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_get_project",
+      "validArgs": { "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_generate_spec",
+      "validArgs": { "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_get_spec",
+      "validArgs": { "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_generation_note",
+      "validArgs": { "text": "всегда markdown", "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_generate_all",
+      "validArgs": {},
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_spec_generation_defaults",
+      "validArgs": { "project_id": "$project_id" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_spec_generation_explained",
+      "validArgs": {},
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_set_folder",
+      "validArgs": { "folder_id": "fixture-folder" },
+      "expectedEnvelope": "content"
+    },
+    {
+      "name": "freelance_classify_document",
+      "validArgs": { "text": "новый документ без совпадений", "filename": "x.pdf" },
+      "expectedEnvelope": "content"
+    }
+  ]
+}

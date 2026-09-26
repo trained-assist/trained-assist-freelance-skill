@@ -1,0 +1,9 @@
+{
+  "type": "default",
+  "signals": "all-true",
+  "integrationCount": 1,
+  "hasMVP": true,
+  "score": 0,
+  "level": "НИЗКИЙ 🟢",
+  "verdictContains": "БРАТЬ"
+}

@@ -144,8 +144,23 @@ deliberately decoupled from `trained-assist-agent`'s server/runner/session code.
 Runs on the same shared VM infra under the same `vova` user (no separate Linux
 user), in its own directory. See `bin/README.md` for the deploy/run details.
 
-## Tests
+## Tests & CI
+
+Executable contract per `trained-assist-agent/docs/domain-skill-repo-test-rules.md`
+(see `docs/skill-ci.md` for the full rationale):
 
 ```
-npm test   # node --test tests/*.test.js — offline, no network calls
+npm run test:unit       # existing offline domain tests (node --test)
+npm run test:contract   # L1: mcp.manifest.json, digest, name parity, real core consumer
+npm run test:behavior   # L2: real MCP subprocess over stdio + per-tool fixtures
+npm run test:guards     # L3: static gates (no agent spawn, timeouts, secrets, paths)
+npm run test:replay     # deterministic replay gate (isolated roots, loopback-only)
+npm run test:e2e        # staging-only: live engine + LLM judge (needs opencode + key)
 ```
+
+Only two things are mocked — the LLM (scripted `fixtures/llm/*.json` on loopback)
+and external network (isolation guard). `lib/risk-engine.js` is deterministic and
+is never mocked; `registry.js` is never mocked (mock-registrar is an anti-pattern).
+The replay gate vendors the core harness (`scripts/staging/run.mjs` +
+`isolation-guard.cjs` + `suites.json`) and executes the mandatory scenarios in
+`tests/replay/`; `staging-results/manifest.json` records exactly what ran.

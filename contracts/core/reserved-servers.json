@@ -1,0 +1,10 @@
+{
+  "_comment": "Snapshot of core-owned MCP server ids that a domain skill must never shadow (writeMcpConfig / mergeAdapterServers, trained-assist-agent src/browser.js). Update when core adds a new owned server.",
+  "sourceRepository": "trained-assist/trained-assist-agent",
+  "servers": [
+    "playwright",
+    "trained-skills",
+    "hh-skills",
+    "engineering-skills"
+  ]
+}
