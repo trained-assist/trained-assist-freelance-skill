@@ -103,7 +103,7 @@ jobs:
       - run: npm ci --include=dev
       - name: Deterministic replay gate (isolated roots, loopback-only)
         run: npm run test:replay
-      - name: Upload run manifest (audit: what exactly ran)
+      - name: Upload run manifest (audit — what exactly ran)
         if: always()
         uses: actions/upload-artifact@v4
         with:
