@@ -49,7 +49,7 @@ function projectFile(username, slug, ...segments) {
 // The spec pipeline produces two INDEPENDENT client-facing documents per project
 // (`long.md`, `short.md`), plus a normalized intermediate source (`_source.md`)
 // that is the single input both variants are generated from. Legacy single
-// `tz.md` is kept read-compatible (see freelance_get_spec).
+// `tz.md` is kept read-compatible (see engineering_get_spec in trained-assist-engineering).
 const SPEC_VARIANTS = ['long', 'short'];
 
 function specDir(username, slug) {

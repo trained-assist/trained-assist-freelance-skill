@@ -60,7 +60,6 @@ the agent as before.
 | `/questions <slug>` | `freelance_questions` | |
 | `/classify <текст>` | `freelance_classify_document` | needs OpenRouter key |
 | `/folder <id>` | `freelance_set_folder` | |
-| `/spec <slug>` | `freelance_generate_spec` | returns requirements+solution for ТЗ |
 
 Slash commands are intentionally **never** forwarded into the agent CLI — a
 leading `/` gets misparsed as the CLI's own command (see bot.js `/start`

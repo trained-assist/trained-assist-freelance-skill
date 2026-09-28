@@ -44,14 +44,14 @@ provenance references, no meta-sections («допущения и почему о
 Open/unconfirmed items go to a short «Открытые вопросы» section, not into the
 requirements prose.
 
-- **Persistent generation rules** — `_generation.md` (profile) and
-  `<project>/generation.md` (project, wins), written via `freelance_generation_note`.
-  Applied to every subsequent generation.
-- **Ad-hoc edits** — a one-off request («убери раздел X», «сократи», «измени только
-  Short») edits the existing `long.md`/`short.md` in place via `freelance_get_spec`;
-  the user's instruction outranks the template (a removed section is not restored).
-- **Batch** — `freelance_generate_all` collects projects over a window (default 6h),
-  returns a projects/risks table to show first, then generates per project.
+- **Spec generation lives in `trained-assist-engineering`** (issue #43, plan #43):
+  `engineering_generate_spec` / `engineering_get_spec` / `engineering_generation_note` /
+  `engineering_generate_all` / `engineering_spec_generation_{defaults,explained}`.
+  This skill keeps the intake pipeline (facts → requirements → interpretation →
+  solution) and still owns the `spec/` layout on disk — `lib/paths.js` and the
+  directory layout above are unchanged (read-compat), only the generator moved.
+  Persistent rules are now `<profile>/agent-data/spec-generation/_generation.md`
+  and `<project>/spec/generation.md`.
 
 `freelance_add_info`'s `stage` argument is what enforces this — each call writes
 to exactly one file, so "client said X" can't casually leak into the solution,
@@ -105,10 +105,8 @@ $USERS_DIR/<profile>/Фриланс проекты/
 - `10-freelance-project.js` — `freelance_new_project`, `freelance_add_info`,
   `freelance_assess`, `freelance_questions`, `freelance_list` (with `since` window),
   `freelance_get_project` (full-context dump for resuming in a new session),
-  `freelance_generate_spec` (normalized context + `variants: long|short|both`),
-  `freelance_get_spec` (read current long/short for in-place editing),
-  `freelance_generation_note` (persistent profile/project generation rules),
-  `freelance_generate_all` (batch over a time window), `freelance_set_folder`.
+  `freelance_set_folder`.
+  Spec generation is **not here** — see `trained-assist-engineering` (issue #43).
 - `20-freelance-classifier.js` — `freelance_classify_document`: cheap-LLM-only
   (OpenRouter, never spawns a Claude Code session) routing of a new incoming
   document to an existing project or "new project". Content dominates over
