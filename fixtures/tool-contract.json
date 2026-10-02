@@ -46,6 +46,13 @@
       "expectedEnvelope": "content"
     },
     {
+      "name": "freelance_search",
+      "validArgs": {
+        "query": "фото товара"
+      },
+      "expectedEnvelope": "content"
+    },
+    {
       "name": "freelance_set_folder",
       "validArgs": {
         "folder_id": "fixture-folder"

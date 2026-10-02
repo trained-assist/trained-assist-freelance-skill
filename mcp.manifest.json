@@ -6,12 +6,12 @@
       "providerId": "freelance",
       "mcpServerId": "freelance-skills",
       "repository": "trained-assist/trained-assist-freelance-skill",
-      "revision": "f2d21c2477385257e730e8f46b7f930174fa1b62",
+      "revision": "b9a4d2aceb8bf443c0fbc94e8d61c771a99bbc63",
       "manifestVersion": 2,
       "artifactDir": "src",
       "entrypoint": "src/mcp-skills/index.js",
       "manifest": "provider-manifest.json",
-      "artifactDigest": "b3d8050ffdc061b18aa236b1ee186286d9a8d66743d998fb0c33c9ac25a76572",
+      "artifactDigest": "b87b06daecda927dfe9259612908546e0bd4a9039b86fbd07d71a0a223d7c10b",
       "approvedManifest": {
         "version": 2,
         "providerId": "freelance",
@@ -298,6 +298,31 @@
             "effect": "write",
             "requiresApproval": false,
             "retrySafety": "unsafe"
+          },
+          {
+            "name": "freelance_search",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "query"
+              ],
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Подстрока для поиска (регистронезависимо), например «бюджет» или «предоплата 50%»"
+                },
+                "project_id": {
+                  "type": "string",
+                  "description": "Опционально: сузить поиск до одного проекта (slug)"
+                }
+              }
+            },
+            "allowedTriggers": [
+              "user"
+            ],
+            "effect": "read",
+            "requiresApproval": false,
+            "retrySafety": "read_only"
           }
         ],
         "contextFields": [

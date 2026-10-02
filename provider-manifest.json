@@ -284,6 +284,31 @@
       "effect": "write",
       "requiresApproval": false,
       "retrySafety": "unsafe"
+    },
+    {
+      "name": "freelance_search",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Подстрока для поиска (регистронезависимо), например «бюджет» или «предоплата 50%»"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Опционально: сузить поиск до одного проекта (slug)"
+          }
+        }
+      },
+      "allowedTriggers": [
+        "user"
+      ],
+      "effect": "read",
+      "requiresApproval": false,
+      "retrySafety": "read_only"
     }
   ],
   "contextFields": [
