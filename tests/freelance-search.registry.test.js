@@ -31,5 +31,10 @@ test('freelance_search присутствует в реестре тулов с 
   assert.ok(typeof t.description === 'string' && t.description.length > 0, 'описание непустое');
   assert.ok(t.inputSchema && t.inputSchema.type === 'object', 'inputSchema — объект-схема');
   const props = Object.keys((t.inputSchema && t.inputSchema.properties) || {}).sort();
-  assert.deepStrictEqual(props, ['project_id', 'query'], 'схема заявляет ровно query и project_id');
+  // `limit` is part of the contract (README + description): the live calling
+  // layer types arguments by this schema, so an undeclared property reached the
+  // handler as a string and every real call with limit failed validation
+  // (found in scenario step-14 verification, issue #33).
+  assert.deepStrictEqual(props, ['limit', 'project_id', 'query'], 'схема заявляет ровно query, project_id и limit');
+  assert.equal(t.inputSchema.properties.limit.type, 'integer', 'limit объявлен как integer');
 });

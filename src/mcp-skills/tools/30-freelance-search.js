@@ -147,6 +147,10 @@ module.exports = {
         properties: {
           query: { type: 'string', description: 'Подстрока для поиска (регистронезависимо), например «бюджет» или «предоплата 50%»' },
           project_id: { type: 'string', description: 'Опционально: сузить поиск до одного проекта (slug)' },
+          // Declared, not just described: the calling layer types arguments by
+          // this schema, so an undeclared `limit` arrived as a string and every
+          // live call with it failed validation (issue #33, step-14 verification).
+          limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT, description: `Максимум совпадений в ответе (1..${MAX_LIMIT}, по умолчанию ${DEFAULT_LIMIT}); при обрезке truncated:true и total` },
         },
       },
       handler: async (args = {}) => {

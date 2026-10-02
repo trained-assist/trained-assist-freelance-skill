@@ -6,12 +6,12 @@
       "providerId": "freelance",
       "mcpServerId": "freelance-skills",
       "repository": "trained-assist/trained-assist-freelance-skill",
-      "revision": "b9a4d2aceb8bf443c0fbc94e8d61c771a99bbc63",
+      "revision": "ff06165ee82ce54221f05d90f7467109a220fb6e",
       "manifestVersion": 2,
       "artifactDir": "src",
       "entrypoint": "src/mcp-skills/index.js",
       "manifest": "provider-manifest.json",
-      "artifactDigest": "b87b06daecda927dfe9259612908546e0bd4a9039b86fbd07d71a0a223d7c10b",
+      "artifactDigest": "9121c7f5e6e23d67b503590a7169cb6d3a856ce421e55d72daafcd5660461af1",
       "approvedManifest": {
         "version": 2,
         "providerId": "freelance",
@@ -314,6 +314,13 @@
                 "project_id": {
                   "type": "string",
                   "description": "Опционально: сузить поиск до одного проекта (slug)"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "default": 100,
+                  "description": "Максимум совпадений в ответе (1..1000, по умолчанию 100); при обрезке truncated:true и total"
                 }
               }
             },

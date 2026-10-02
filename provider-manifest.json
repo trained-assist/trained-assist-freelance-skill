@@ -300,6 +300,13 @@
           "project_id": {
             "type": "string",
             "description": "Опционально: сузить поиск до одного проекта (slug)"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100,
+            "description": "Максимум совпадений в ответе (1..1000, по умолчанию 100); при обрезке truncated:true и total"
           }
         }
       },
