@@ -52,7 +52,13 @@ try {
         const result = await registry.callTool(name, args || {});
         // agent#1481: never hand the model an empty text — see tool-result.js
         const text = toolResultText(name, result);
-        respond(id, { content: [{ type: 'text', text }] });
+        // A handler may report a validation/not-found failure in-band as an
+        // object {isError:true, ...} instead of throwing (freelance_search's
+        // contract: invalid input yields a readable object, never an
+        // exception). Mirror that flag into the tools/call envelope so the
+        // model sees the same signal as for a thrown Error.
+        const inBand = result && typeof result === 'object' && result.isError === true;
+        respond(id, { content: [{ type: 'text', text }], ...(inBand ? { isError: true } : {}) });
       } catch (e) {
         // Tool execution errors are reported in-band (`isError`), not as a
         // JSON-RPC fault and never as a process crash — the MCP tools contract.

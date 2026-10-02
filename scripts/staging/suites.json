@@ -1,7 +1,8 @@
 {
   "vitest": [
     "tests/replay/01-intake-pipeline.spec.mjs",
-    "tests/replay/02-classifier-routing.spec.mjs"
+    "tests/replay/02-classifier-routing.spec.mjs",
+    "tests/replay/03-freelance-search.spec.mjs"
   ],
   "node": [
     "test/staging-isolation-guard.test.cjs",
