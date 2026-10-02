@@ -9,17 +9,11 @@
 // itself to auto-route the next one to the same project.
 
 const fs = require('fs');
-const https = require('https');
-const os = require('os');
 const path = require('path');
 
 const USER_ID = process.env.USER_ID || process.env.AGENT_USER_ID || '';
 
-const { freelanceRoot, recentContextPath, ensureDir, projectFile } = require('../lib/paths');
-
-function tokensRoot() {
-  return process.env.AGENT_TOKENS_DIR || path.join(os.homedir(), 'agent-tokens');
-}
+const { freelanceRoot, recentContextPath, ensureDir, projectFile, tokensRoot } = require('../lib/paths');
 
 function readOrKey() {
   try {
@@ -34,31 +28,23 @@ function readOrKey() {
 
 const FAST_MODEL = 'deepseek/deepseek-v4-flash-0731';
 
-function llmCall(apiKey, model, messages, maxTokens = 800, temperature = 0.1) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({ model, messages, temperature, max_tokens: maxTokens });
-    const req = https.request({
-      hostname: 'openrouter.ai',
-      path: '/api/v1/chat/completions',
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-    }, (res) => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          if (parsed.error) return reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
-          const content = parsed.choices?.[0]?.message?.content;
-          if (content == null) return reject(new Error(`LLM returned empty content (model: ${model})`));
-          resolve(content);
-        } catch (e) { reject(e); }
-      });
-    });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
+// Injectable endpoint so CI can replay scripted LLM fixtures on loopback without
+// a real paid call (docs/domain-skill-repo-test-rules.md §0: mock the LLM seam).
+// Production default is the real OpenRouter host.
+const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai';
+
+async function llmCall(apiKey, model, messages, maxTokens = 800, temperature = 0.1) {
+  const res = await fetch(`${OPENROUTER_BASE_URL}/api/v1/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+    signal: AbortSignal.timeout(30_000),
   });
+  const parsed = await res.json().catch(() => ({}));
+  if (!res.ok || parsed.error) throw new Error(parsed.error?.message || `OpenRouter HTTP ${res.status}`);
+  const content = parsed.choices?.[0]?.message?.content;
+  if (content == null) throw new Error(`LLM returned empty content (model: ${model})`);
+  return content;
 }
 
 function parseLlmJson(content) {

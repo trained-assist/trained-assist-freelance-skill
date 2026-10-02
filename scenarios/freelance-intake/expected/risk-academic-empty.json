@@ -1,0 +1,8 @@
+{
+  "type": "academic",
+  "signals": "all-null",
+  "score": 5,
+  "level": "СРЕДНИЙ 🟡",
+  "risksOnly": ["scopeUnambiguous", "deliveryAgreed", "priceAgreed"],
+  "forbiddenSignals": ["prepaymentReady", "budgetConfirmed", "hasClearDeadline"]
+}

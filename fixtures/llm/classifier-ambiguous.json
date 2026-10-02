@@ -1,0 +1,6 @@
+{
+  "ranked": [
+    { "project_id": "$project_id", "confidence": 0.61, "why": "частичное совпадение по теме" }
+  ],
+  "likely_new": false
+}

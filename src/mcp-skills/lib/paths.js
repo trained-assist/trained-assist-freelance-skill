@@ -20,6 +20,12 @@ function profileRoot(username) {
   return path.join(USERS_ROOT, String(username));
 }
 
+// Shared agent-tokens root (OPENROUTER_API_KEY, gdrive SA, ...). Kept here so
+// tool modules never reach for os.homedir() directly (L3 guard).
+function tokensRoot() {
+  return process.env.AGENT_TOKENS_DIR || path.join(os.homedir(), 'agent-tokens');
+}
+
 // Cyrillic folder name is intentional — this is the user-facing convention the
 // profile owner chose ("Фриланс проекты"), consistent with other Cyrillic paths
 // already used in this profile's workspace (contexts/, project folders).
@@ -94,6 +100,7 @@ module.exports = {
   FREELANCE_DIRNAME,
   SPEC_VARIANTS,
   profileRoot,
+  tokensRoot,
   freelanceRoot,
   indexPath,
   recentContextPath,
