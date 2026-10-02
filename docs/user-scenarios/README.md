@@ -12,6 +12,7 @@ docs/user-scenarios/
   README.md                     ← этот файл
   freelance/
     01-freelance-project-spec.md ← intake → факты/требования/решение → GO/NO-GO
+    02-freelance-search.md       ← freelance_search: полнотекстовый поиск по проектам
 ```
 
 ## Формат сценария
