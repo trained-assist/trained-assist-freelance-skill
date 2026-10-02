@@ -111,6 +111,13 @@ $USERS_DIR/<profile>/Фриланс проекты/
   (OpenRouter, never spawns a Claude Code session) routing of a new incoming
   document to an existing project or "new project". Content dominates over
   filename; recency is a prior, never sufficient on its own to auto-file.
+- `30-freelance-search.js` — `freelance_search`: read-only substring search
+  (case-insensitive, no LLM/network) across every project's pipeline files —
+  `freelance_search({query, project_id?, limit?})` → `{project, file, line,
+  snippet}` matches with `total`/`truncated` when the result is capped.
+  Symlinks are not followed and service entries (`_*`) are not scanned.
+  A Telegram `/search` command is intentionally not wired into `commands.json`
+  (V3 = direct agent call; command surface is an owner decision).
 
 ## Provider manifest (`provider-manifest.json`)
 
